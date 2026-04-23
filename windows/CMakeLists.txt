@@ -2,6 +2,9 @@
 cmake_minimum_required(VERSION 3.14)
 project(amour LANGUAGES CXX)
 
+# Thêm dòng này để sửa lỗi Firebase SDK trên Windows
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
 set(BINARY_NAME "amour")

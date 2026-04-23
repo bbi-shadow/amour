@@ -1,0 +1,99 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ── USERS ─────────────────────────────────
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isOwner(userId);
+      allow delete: if false; // Admin manually deletes
+    }
+
+    // ── MATCHES ───────────────────────────────
+    match /matches/{matchId} {
+      allow read, write: if isSignedIn() && request.auth.uid in resource.data.users;
+      allow create: if isSignedIn();
+    }
+
+    // ── CONVERSATIONS ─────────────────────────
+    match /conversations/{convId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow write: if isSignedIn() && request.auth.uid in resource.data.participants;
+
+      match /messages/{msgId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    // ── SWIPES & LIKES ────────────────────────
+    match /swipes/{userId}/actions/{targetId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    match /likes/{userId}/liked/{targetId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // ── BLOCKS ────────────────────────────────
+    match /blocks/{userId}/blocked/{targetId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // ── REPORTS ───────────────────────────────
+    match /reports/{reportId} {
+      allow create: if isSignedIn();
+      allow read, write: if false; // Only via Admin/Console
+    }
+
+    // ── NOTIFICATIONS ─────────────────────────
+    match /notifications/{notifId} {
+      allow read, update: if isSignedIn() && request.auth.uid == resource.data.userId;
+      allow create: if isSignedIn();
+    }
+
+    // ── CALLS ─────────────────────────────────
+    match /calls/{callId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ── ADMINS ────────────────────────────────
+    match /admins/{adminId} {
+      allow read: if isOwner(adminId);
+      allow write: if false;
+    }
+
+    // ── POSTS ─────────────────────────────────
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && request.auth.uid == resource.data.authorId;
+    }
+
+    // ── CITIES ────────────────────────────────
+    match /cities/{cityId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // ── FOLLOW ────────────────────────────────
+    match /following/{userId}/list/{targetId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    match /followers/{userId}/list/{targetId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+  }
+}

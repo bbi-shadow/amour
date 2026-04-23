@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import '../../services/match_service.dart';
+import 'package:get/get.dart';
+import '../../services/firestore_service.dart';
+import '../../utils/app_constants.dart';
+import '../../themes/app_theme.dart';
+import '../call/call_screen.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final String conversationId;
@@ -25,34 +29,41 @@ class ChatDetailScreen extends StatefulWidget {
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final TextEditingController _textCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
-  final MatchService _matchService = MatchService();
   final String currentUserId = FirebaseAuth.instance.currentUser!.uid;
   bool _isSending = false;
 
   @override
   void initState() {
     super.initState();
-    // Đánh dấu đã xem khi vào màn hình
-    _matchService.markAsSeen(widget.conversationId);
-  }
-
-  @override
-  void dispose() {
-    _textCtrl.dispose();
-    _scrollCtrl.dispose();
-    super.dispose();
+    // ✅ Messenger logic: Vừa vào là đánh dấu đã xem ngay
+    FirestoreService.markMessagesAsSeen(widget.conversationId);
   }
 
   void _scrollToBottom() {
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (_scrollCtrl.hasClients) {
-        _scrollCtrl.animateTo(
-          _scrollCtrl.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
+    if (_scrollCtrl.hasClients) {
+      _scrollCtrl.animateTo(_scrollCtrl.position.maxScrollExtent, 
+          duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    }
+  }
+
+  void _initiateCall({required bool isVideo}) async {
+    final callId = widget.conversationId;
+    await FirebaseFirestore.instance.collection(AppConstants.colCalls).doc(callId).set({
+      'callerId': currentUserId,
+      'receiverId': widget.otherUserId,
+      'status': 'ringing',
+      'type': isVideo ? 'video' : 'voice',
+      'createdAt': FieldValue.serverTimestamp(),
     });
+
+    Get.to(() => CallScreen(
+      callId: callId,
+      otherUserId: widget.otherUserId,
+      otherUserName: widget.otherUserName,
+      otherUserPhotoUrl: widget.otherUserPhotoUrl,
+      isVideo: isVideo,
+      isIncoming: false,
+    ));
   }
 
   Future<void> _sendMessage() async {
@@ -63,18 +74,27 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     _textCtrl.clear();
 
     try {
-      await _matchService.sendMessage(
-        conversationId: widget.conversationId,
-        text: text,
-        receiverId: widget.otherUserId,
-      );
+      final msgRef = FirebaseFirestore.instance
+          .collection(AppConstants.colConversations)
+          .doc(widget.conversationId)
+          .collection(AppConstants.colMessages)
+          .doc();
+
+      await msgRef.set({
+        'senderId': currentUserId,
+        'text': text,
+        'timestamp': FieldValue.serverTimestamp(),
+        'seen': false,
+      });
+
+      await FirebaseFirestore.instance.collection(AppConstants.colConversations).doc(widget.conversationId).update({
+        'lastMessage': text,
+        'lastMessageTime': FieldValue.serverTimestamp(),
+        'lastSenderId': currentUserId,
+        'unreadCount.${widget.otherUserId}': FieldValue.increment(1),
+      });
+
       _scrollToBottom();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Không thể gửi tin nhắn')),
-        );
-      }
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
@@ -83,8 +103,23 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
-      appBar: _buildAppBar(),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0.5,
+        title: Row(
+          children: [
+            CircleAvatar(radius: 18, backgroundImage: widget.otherUserPhotoUrl != null ? NetworkImage(widget.otherUserPhotoUrl!) : null),
+            const SizedBox(width: 10),
+            Expanded(child: Text(widget.otherUserName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+          ],
+        ),
+        actions: [
+          IconButton(icon: const Icon(Icons.call, color: AppColors.primary), onPressed: () => _initiateCall(isVideo: false)),
+          IconButton(icon: const Icon(Icons.videocam, color: AppColors.primary), onPressed: () => _initiateCall(isVideo: true)),
+          const SizedBox(width: 5),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(child: _buildMessageList()),
@@ -94,122 +129,34 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
-  AppBar _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.white,
-      elevation: 0.5,
-      shadowColor: const Color(0xFFFFEEF2),
-      leadingWidth: 40,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios,
-            color: Color(0xFF2D2D2D), size: 20),
-        onPressed: () => Navigator.pop(context),
-      ),
-      title: Row(
-        children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: const Color(0xFFFFB3C1),
-            backgroundImage: widget.otherUserPhotoUrl != null
-                ? NetworkImage(widget.otherUserPhotoUrl!)
-                : null,
-            child: widget.otherUserPhotoUrl == null
-                ? Text(
-              widget.otherUserName.isNotEmpty
-                  ? widget.otherUserName[0].toUpperCase()
-                  : '?',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            )
-                : null,
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.otherUserName,
-                style: const TextStyle(
-                  color: Color(0xFF2D2D2D),
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Text(
-                'Đang hoạt động',
-                style: TextStyle(
-                  color: Color(0xFF4CAF50),
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.more_vert, color: Color(0xFF888888)),
-          onPressed: () {},
-        ),
-      ],
-    );
-  }
-
   Widget _buildMessageList() {
     return StreamBuilder<QuerySnapshot>(
-      stream: _matchService.getMessages(widget.conversationId),
+      stream: FirebaseFirestore.instance
+          .collection(AppConstants.colConversations)
+          .doc(widget.conversationId)
+          .collection(AppConstants.colMessages)
+          .orderBy('timestamp', descending: false)
+          .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: Color(0xFFFF6B8A)),
-          );
-        }
-
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return _buildChatEmptyState();
-        }
-
-        // Đánh dấu seen khi nhận tin mới
-        _matchService.markAsSeen(widget.conversationId);
-        _scrollToBottom();
-
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        
+        // ✅ Đánh dấu đã xem khi có tin nhắn mới trong lúc đang mở app
+        FirestoreService.markMessagesAsSeen(widget.conversationId);
+        
         final messages = snapshot.data!.docs;
-
         return ListView.builder(
           controller: _scrollCtrl,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.all(16),
           itemCount: messages.length,
           itemBuilder: (context, index) {
-            final msg = messages[index].data() as Map<String, dynamic>;
-            final isMe = msg['senderId'] == currentUserId;
-            final isLast = index == messages.length - 1;
-
-            // Kiểm tra có hiển thị thời gian không
-            bool showTime = false;
-            if (index == 0) {
-              showTime = true;
-            } else {
-              final prevMsg =
-              messages[index - 1].data() as Map<String, dynamic>;
-              final prevTs = prevMsg['timestamp'] as Timestamp?;
-              final currTs = msg['timestamp'] as Timestamp?;
-              if (prevTs != null && currTs != null) {
-                final diff =
-                    currTs.toDate().difference(prevTs.toDate()).inMinutes;
-                showTime = diff > 10;
-              }
-            }
-
+            final data = messages[index].data() as Map<String, dynamic>;
+            final bool isMe = data['senderId'] == currentUserId;
+            final bool isLast = index == messages.length - 1;
+            
             return _MessageBubble(
-              text: msg['text'] ?? '',
+              text: data['text'],
               isMe: isMe,
-              timestamp: msg['timestamp'] as Timestamp?,
-              seen: msg['seen'] ?? false,
-              showTime: showTime,
-              isLastMessage: isLast && isMe,
-              otherUserPhoto: widget.otherUserPhotoUrl,
+              showSeen: isLast && isMe && (data['seen'] == true),
             );
           },
         );
@@ -217,88 +164,27 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
-  Widget _buildChatEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text('💕', style: TextStyle(fontSize: 48)),
-          const SizedBox(height: 12),
-          Text(
-            'Bạn và ${widget.otherUserName} đã match!',
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2D2D2D),
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Hãy gửi lời chào đầu tiên nhé 👋',
-            style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildInputBar() {
     return Container(
-      color: Colors.white,
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 12,
-        top: 10,
-        bottom: MediaQuery.of(context).padding.bottom + 10,
-      ),
+      padding: EdgeInsets.fromLTRB(16, 10, 16, MediaQuery.of(context).padding.bottom + 10),
+      decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Colors.grey[200]!))),
       child: Row(
         children: [
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF5F5F5),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: TextField(
-                controller: _textCtrl,
-                textCapitalization: TextCapitalization.sentences,
-                maxLines: null,
-                decoration: const InputDecoration(
-                  hintText: 'Nhắn tin...',
-                  hintStyle: TextStyle(color: Color(0xFFBBBBBB)),
-                  border: InputBorder.none,
-                  contentPadding:
-                  EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                ),
-                onSubmitted: (_) => _sendMessage(),
+            child: TextField(
+              controller: _textCtrl,
+              decoration: InputDecoration(
+                hintText: "Nhắn tin...",
+                filled: true, fillColor: Colors.grey[100],
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(25), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           GestureDetector(
             onTap: _sendMessage,
-            child: Container(
-              width: 46,
-              height: 46,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFFFF6B8A), Color(0xFFFF9BB0)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                shape: BoxShape.circle,
-              ),
-              child: _isSending
-                  ? const Padding(
-                padding: EdgeInsets.all(12),
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
-                  : const Icon(Icons.send_rounded,
-                  color: Colors.white, size: 22),
-            ),
+            child: const CircleAvatar(backgroundColor: AppColors.primary, child: Icon(Icons.send, color: Colors.white, size: 20)),
           ),
         ],
       ),
@@ -309,147 +195,33 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 class _MessageBubble extends StatelessWidget {
   final String text;
   final bool isMe;
-  final Timestamp? timestamp;
-  final bool seen;
-  final bool showTime;
-  final bool isLastMessage;
-  final String? otherUserPhoto;
+  final bool showSeen;
 
-  const _MessageBubble({
-    required this.text,
-    required this.isMe,
-    required this.timestamp,
-    required this.seen,
-    required this.showTime,
-    required this.isLastMessage,
-    this.otherUserPhoto,
-  });
-
-  String get timeText {
-    if (timestamp == null) return '';
-    return DateFormat('HH:mm').format(timestamp!.toDate());
-  }
+  const _MessageBubble({required this.text, required this.isMe, required this.showSeen});
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
-        // Hiển thị thời gian phân cách
-        if (showTime)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              _formatTimestamp(timestamp),
-              style: const TextStyle(
-                color: Color(0xFFCCCCCC),
-                fontSize: 12,
-              ),
+        Container(
+          margin: const EdgeInsets.symmetric(vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isMe ? AppColors.primary : Colors.grey[200],
+            borderRadius: BorderRadius.circular(20).copyWith(
+              bottomRight: isMe ? const Radius.circular(0) : const Radius.circular(20),
+              bottomLeft: isMe ? const Radius.circular(20) : const Radius.circular(0),
             ),
           ),
-
-        // Bong bóng tin nhắn
-        Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Row(
-            mainAxisAlignment:
-            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // Avatar của đối phương
-              if (!isMe) ...[
-                CircleAvatar(
-                  radius: 14,
-                  backgroundColor: const Color(0xFFFFB3C1),
-                  backgroundImage: otherUserPhoto != null
-                      ? NetworkImage(otherUserPhoto!)
-                      : null,
-                  child: otherUserPhoto == null
-                      ? const Icon(Icons.person,
-                      color: Colors.white, size: 16)
-                      : null,
-                ),
-                const SizedBox(width: 6),
-              ],
-
-              // Bubble
-              Flexible(
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.68,
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isMe
-                        ? const Color(0xFFFF6B8A)
-                        : Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(18),
-                      topRight: const Radius.circular(18),
-                      bottomLeft: Radius.circular(isMe ? 18 : 4),
-                      bottomRight: Radius.circular(isMe ? 4 : 18),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    text,
-                    style: TextStyle(
-                      color: isMe ? Colors.white : const Color(0xFF2D2D2D),
-                      fontSize: 15,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ),
-
-              // Thời gian + seen (chỉ tin nhắn của mình)
-              if (isMe) ...[
-                const SizedBox(width: 4),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      timeText,
-                      style: const TextStyle(
-                        color: Color(0xFFCCCCCC),
-                        fontSize: 11,
-                      ),
-                    ),
-                    if (isLastMessage)
-                      Text(
-                        seen ? 'Đã xem' : 'Đã gửi',
-                        style: TextStyle(
-                          color: seen
-                              ? const Color(0xFFFF6B8A)
-                              : const Color(0xFFCCCCCC),
-                          fontSize: 11,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ],
-          ),
+          child: Text(text, style: TextStyle(color: isMe ? Colors.white : Colors.black87, fontSize: 15)),
         ),
+        if (showSeen)
+          const Padding(
+            padding: EdgeInsets.only(top: 2, right: 4),
+            child: Text("Đã xem", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+          ),
       ],
     );
-  }
-
-  String _formatTimestamp(Timestamp? ts) {
-    if (ts == null) return '';
-    final dt = ts.toDate();
-    final now = DateTime.now();
-    if (now.difference(dt).inDays == 0) {
-      return 'Hôm nay ${DateFormat('HH:mm').format(dt)}';
-    } else if (now.difference(dt).inDays == 1) {
-      return 'Hôm qua ${DateFormat('HH:mm').format(dt)}';
-    }
-    return DateFormat('dd/MM/yyyy HH:mm').format(dt);
   }
 }

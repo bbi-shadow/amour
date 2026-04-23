@@ -1,6 +1,7 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart'; // ✅ Thêm để dùng kIsWeb
 import 'package:flutter/material.dart';
-import '/services/database_helper.dart';
+import '../services/database_helper.dart';
 
 /// Widget tự động:
 /// 1. Kiểm tra cache local SQLite
@@ -50,16 +51,23 @@ class _CachedPhotoWidgetState extends State<CachedPhotoWidget> {
 
   Future<void> _resolve() async {
     if (!mounted) return;
+    
+    // ✅ Trên Web không dùng cache SQLite local file
+    if (kIsWeb) {
+      setState(() { _loading = false; });
+      return;
+    }
+
     setState(() { _loading = true; _failed = false; });
 
-    // Bước 1: kiểm tra cache
+    // Bước 1: kiểm tra cache local để hiện ảnh ngay lập tức (không cần mạng)
     final cached = await DatabaseHelper.getCachedPhotoPath(widget.uid);
     if (cached != null && mounted) {
       setState(() { _localPath = cached; _loading = false; });
       return;
     }
 
-    // Bước 2: tải về nếu có URL
+    // Bước 2: tải về từ Cloudinary nếu chưa có trong máy
     if (widget.photoUrl != null && widget.photoUrl!.isNotEmpty) {
       final downloaded = await DatabaseHelper.downloadAndCachePhoto(
           widget.uid, widget.photoUrl!);
@@ -78,6 +86,20 @@ class _CachedPhotoWidgetState extends State<CachedPhotoWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ Xử lý hiển thị trên Web
+    if (kIsWeb) {
+      if (widget.photoUrl != null && widget.photoUrl!.isNotEmpty) {
+        return Image.network(
+          widget.photoUrl!,
+          fit: widget.fit,
+          width: widget.width,
+          height: widget.height,
+          errorBuilder: (_, __, ___) => _placeholder(),
+        );
+      }
+      return _placeholder();
+    }
+
     if (_loading) {
       return SizedBox(
         width: widget.width,
@@ -100,7 +122,7 @@ class _CachedPhotoWidgetState extends State<CachedPhotoWidget> {
       );
     }
 
-    // Fallback: thử Image.network
+    // Fallback: thử Image.network nếu cache lỗi
     if (widget.photoUrl != null && widget.photoUrl!.isNotEmpty) {
       return Image.network(
         widget.photoUrl!,

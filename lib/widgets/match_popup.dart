@@ -1,33 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:confetti/confetti.dart';
 import '../models/user_model.dart';
-import '/screens/chat/chat_detail_screen.dart'; // ✅ dùng đúng ChatDetailScreen
+import '../themes/app_theme.dart';
+import '../screens/chat/chat_detail_screen.dart';
 
-class MatchPopup extends StatelessWidget {
-  final UserModel matchedUser;
-  final String matchId;
-  final String currentUserName;
-  final String? currentUserPhotoUrl;
-
-  const MatchPopup({
-    super.key,
-    required this.matchedUser,
-    required this.matchId,
-    this.currentUserName = 'Bạn',
-    this.currentUserPhotoUrl,
-  });
-
-  static Future<void> show(
-      BuildContext context, {
-        required UserModel matchedUser,
-        required String matchId,
-        String currentUserName = 'Bạn',
-        String? currentUserPhotoUrl,
-      }) {
-    return showDialog(
+class MatchPopup {
+  static void show(
+    BuildContext context, {
+    required UserModel matchedUser,
+    required String matchId,
+    required String currentUserName,
+    String? currentUserPhotoUrl,
+  }) {
+    showDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black87,
-      builder: (_) => MatchPopup(
+      barrierColor: Colors.black.withOpacity(0.85),
+      builder: (_) => _MatchDialog(
         matchedUser: matchedUser,
         matchId: matchId,
         currentUserName: currentUserName,
@@ -35,167 +25,123 @@ class MatchPopup extends StatelessWidget {
       ),
     );
   }
+}
+
+class _MatchDialog extends StatefulWidget {
+  final UserModel matchedUser;
+  final String matchId;
+  final String currentUserName;
+  final String? currentUserPhotoUrl;
+
+  const _MatchDialog({
+    required this.matchedUser,
+    required this.matchId,
+    required this.currentUserName,
+    this.currentUserPhotoUrl,
+  });
+
+  @override
+  State<_MatchDialog> createState() => _MatchDialogState();
+}
+
+class _MatchDialogState extends State<_MatchDialog> with TickerProviderStateMixin {
+  late ConfettiController _confettiController;
+  late AnimationController _animCtrl;
+  late Animation<double> _scaleAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 3));
+    _confettiController.play(); 
+
+    _animCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    _scaleAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.elasticOut);
+    _animCtrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    _animCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        padding: const EdgeInsets.all(28),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF1a1a2e), Color(0xFF16213e)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(
-            color: const Color(0xFFFF6B8A).withOpacity(0.4),
-            width: 1.5,
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ✨ Confetti hearts
-            const Text('💕', style: TextStyle(fontSize: 40)),
-            const SizedBox(height: 8),
-            const Text(
-              'Thật tuyệt!',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 26,
-                fontWeight: FontWeight.bold,
+    return Stack(
+      alignment: Alignment.topCenter,
+      children: [
+        Dialog(
+          backgroundColor: Colors.transparent,
+          child: ScaleTransition(
+            scale: _scaleAnim,
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFF4B6E), Color(0xFF9B59B6)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [BoxShadow(color: Colors.pink.withOpacity(0.3), blurRadius: 20)],
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Bạn và ${matchedUser.name} đã thích nhau!',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-            const SizedBox(height: 24),
-
-            // Avatars
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _avatar(currentUserPhotoUrl, currentUserName),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text("IT'S A MATCH!", style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                  const SizedBox(height: 10),
+                  Text("Bạn và ${widget.matchedUser.name} đã thích nhau", style: const TextStyle(color: Colors.white70, fontSize: 16)),
+                  const SizedBox(height: 30),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.favorite,
-                          color: Color(0xFFFF6B8A), size: 28),
-                      const SizedBox(height: 4),
-                      Container(
-                        width: 40, height: 1,
-                        color: const Color(0xFFFF6B8A).withOpacity(0.4),
+                      _avatar(widget.currentUserPhotoUrl, widget.currentUserName),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Icon(Icons.favorite, color: Colors.white, size: 40),
                       ),
+                      _avatar(widget.matchedUser.photoUrl, widget.matchedUser.name),
                     ],
                   ),
-                ),
-                _avatar(
-                    matchedUser.photoUrl.isNotEmpty ? matchedUser.photoUrl : null,
-                    matchedUser.name),
-              ],
-            ),
-            const SizedBox(height: 28),
-
-            // Nút Nhắn tin
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ChatDetailScreen(
-                        conversationId: matchId,          // ✅ matchId = conversationId
-                        otherUserId: matchedUser.uid,
-                        otherUserName: matchedUser.name,
-                        otherUserPhotoUrl: matchedUser.photoUrl.isNotEmpty
-                            ? matchedUser.photoUrl
-                            : null,
-                      ),
+                  const SizedBox(height: 40),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Get.to(() => ChatDetailScreen(
+                          conversationId: widget.matchId,
+                          otherUserId: widget.matchedUser.uid,
+                          otherUserName: widget.matchedUser.name,
+                          otherUserPhotoUrl: widget.matchedUser.photoUrl,
+                        ));
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFFFF4B6E), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+                      child: const Text("Gửi tin nhắn ngay", style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.chat_bubble_rounded, size: 18),
-                label: const Text(
-                  'Nhắn tin ngay',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF6B8A),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
-                  elevation: 0,
-                ),
+                  ),
+                  TextButton(onPressed: () => Navigator.pop(context), child: const Text("Để sau", style: TextStyle(color: Colors.white70))),
+                ],
               ),
             ),
-            const SizedBox(height: 10),
-
-            // Nút Tiếp tục
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'Tiếp tục khám phá',
-                style: TextStyle(color: Colors.white54, fontSize: 13),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _avatar(String? photoUrl, String name) {
-    return Column(
-      children: [
-        Container(
-          width: 76, height: 76,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [Color(0xFFFF6B8A), Color(0xFFFFB3C1)],
-            ),
-            border: Border.all(color: const Color(0xFFFF6B8A), width: 2.5),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFFF6B8A).withOpacity(0.35),
-                blurRadius: 12,
-              ),
-            ],
           ),
-          child: photoUrl != null && photoUrl.isNotEmpty
-              ? ClipOval(
-            child: Image.network(photoUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _initials(name)),
-          )
-              : _initials(name),
         ),
-        const SizedBox(height: 6),
-        Text(name,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w600)),
+        ConfettiWidget(
+          confettiController: _confettiController,
+          blastDirectionality: BlastDirectionality.explosive,
+          shouldLoop: false,
+          colors: const [Colors.white, Colors.pink, Colors.orange, Colors.blue],
+        ),
       ],
     );
   }
 
-  Widget _initials(String name) {
-    return Center(
-      child: Text(
-        name.isNotEmpty ? name[0].toUpperCase() : '?',
-        style: const TextStyle(
-            color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
-      ),
+  Widget _avatar(String? url, String name) {
+    return Container(
+      width: 90, height: 90,
+      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 3)),
+      child: ClipOval(child: url != null && url.isNotEmpty ? Image.network(url, fit: BoxFit.cover) : Container(color: Colors.grey[300], child: Center(child: Text(name[0], style: const TextStyle(fontSize: 30))))),
     );
   }
 }
