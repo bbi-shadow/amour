@@ -1,128 +1,86 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:get/get.dart';
+import '../controllers/help_controller.dart';
+import '../controllers/theme_controller.dart';
+import '../themes/app_theme.dart';
 
-class HelpScreen extends StatefulWidget {
+class HelpScreen extends StatelessWidget {
   const HelpScreen({super.key});
 
   @override
-  State<HelpScreen> createState() => _HelpScreenState();
-}
-
-class _HelpScreenState extends State<HelpScreen> {
-  final List<_FaqItem> _faqs = [
-    _FaqItem('Làm thế nào để match với ai đó?',
-        'Vuốt phải hoặc nhấn ❤️ để thích. Nếu người kia cũng thích bạn, hai bạn sẽ match và có thể nhắn tin.'),
-    _FaqItem('Kết bạn khác match như thế nào?',
-        'Match là ghép đôi lãng mạn. Kết bạn là kết nối thông thường — hai bên đều đồng ý thì trở thành bạn bè.'),
-    _FaqItem('Ảnh hàng ngày là gì?',
-        'Mỗi ngày bạn có thể đăng 1 ảnh để bạn bè cùng xem. Tính năng giúp bạn kết nối tự nhiên hơn mỗi ngày.'),
-    _FaqItem('Tôi có thể xoá tin nhắn không?',
-        'Hiện tại chưa hỗ trợ xoá tin nhắn. Tính năng này đang được phát triển.'),
-    _FaqItem('Làm sao để báo cáo người dùng?',
-        'Vào hồ sơ người đó → nhấn icon cờ ở góc phải trên → chọn lý do báo cáo.'),
-    _FaqItem('Tài khoản bị khoá phải làm gì?',
-        'Liên hệ hỗ trợ qua email bên dưới để được giải quyết trong 24 giờ.'),
-  ];
-
-  final Set<int> _expanded = {};
-
-  Future<void> _launchEmail() async {
-    final Uri emailLaunchUri = Uri(
-      scheme: 'mailto',
-      path: 'support@amour.app',
-    );
-    if (await canLaunchUrl(emailLaunchUri)) {
-      await launchUrl(emailLaunchUri);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Không thể mở ứng dụng email')),
-        );
-      }
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final controller = Get.put(HelpController());
+    final isDark = ThemeController.to.isDark;
+    final bg = isDark ? AppColors.darkBg : const Color(0xFFF8F9FE);
+    final textColor = isDark ? Colors.white : AppColors.lightText;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F0F2),
+      backgroundColor: bg,
       appBar: AppBar(
-        title: const Text('Trợ giúp & Phản hồi',
-            style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A))),
-        backgroundColor: Colors.white,
+        title: const Text('Tro giup va Phan hoi', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: isDark ? AppColors.darkCard : Colors.white,
+        foregroundColor: textColor,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF1A1A1A)),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Row(children: [
             Expanded(child: _contactBtn(
-              icon: Icons.email_rounded,
-              label: 'Email hỗ trợ',
-              color: const Color(0xFFFF6B8A),
-              onTap: _launchEmail,
+              icon: Icons.email_outlined,
+              label: 'Email ho tro',
+              color: Colors.redAccent,
+              onTap: controller.launchEmail,
             )),
             const SizedBox(width: 12),
             Expanded(child: _contactBtn(
-              icon: Icons.chat_rounded,
-              label: 'Chat trực tiếp',
-              color: const Color(0xFF5B86E5),
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Tính năng Chat Support đang được khởi tạo...'))
-                );
-              },
+              icon: Icons.chat_bubble_outline_rounded,
+              label: 'Chat truc tiep',
+              color: Colors.blueAccent,
+              onTap: () {},
             )),
           ]),
-          const SizedBox(height: 24),
+          const SizedBox(height: 32),
 
-          const Padding(
-            padding: EdgeInsets.only(left: 4, bottom: 10),
-            child: Text('Câu hỏi thường gặp',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey)),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 12),
+            child: Text('CAU HOI THUONG GAP',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: isDark ? Colors.white38 : Colors.grey, letterSpacing: 1.1)),
           ),
 
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 3))],
+              color: isDark ? AppColors.darkCard : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
             ),
-            child: Column(
-              children: List.generate(_faqs.length, (i) {
-                final faq = _faqs[i];
-                final isOpen = _expanded.contains(i);
-                final isLast = i == _faqs.length - 1;
-                return GestureDetector(
-                  onTap: () => setState(() {
-                    if (isOpen) _expanded.remove(i); else _expanded.add(i);
-                  }),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    decoration: BoxDecoration(
-                      border: isLast ? null : Border(bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.1))),
+            child: Obx(() => Column(
+              children: List.generate(controller.faqs.length, (i) {
+                final faq = controller.faqs[i];
+                final isOpen = controller.expandedIndices.contains(i);
+                final isLast = i == controller.faqs.length - 1;
+                
+                return Column(
+                  children: [
+                    ListTile(
+                      onTap: () => controller.toggleExpanded(i),
+                      title: Text(faq.question, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                      trailing: Icon(isOpen ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, size: 20),
                     ),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [
-                        Expanded(child: Text(faq.question,
-                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1A1A1A)))),
-                        Icon(isOpen ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                            color: Colors.grey[400]),
-                      ]),
-                      if (isOpen) ...[
-                        const SizedBox(height: 8),
-                        Text(faq.answer,
-                            style: TextStyle(fontSize: 13, color: Colors.grey[600], height: 1.5)),
-                      ],
-                    ]),
-                  ),
+                    if (isOpen)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: Text(faq.answer, style: TextStyle(color: isDark ? Colors.white60 : Colors.grey.shade600, fontSize: 13, height: 1.5)),
+                      ),
+                    if (!isLast) Divider(height: 1, indent: 16, endIndent: 16, color: isDark ? Colors.white10 : Colors.grey.shade100),
+                  ],
                 );
               }),
-            ),
+            )),
           ),
-          const SizedBox(height: 24),
-          Center(child: Text('Phiên bản 1.0.0', style: TextStyle(fontSize: 12, color: Colors.grey[400]))),
+          
+          const SizedBox(height: 48),
+          Center(child: Text('Amour v1.0.0', style: TextStyle(fontSize: 12, color: isDark ? Colors.white24 : Colors.grey))),
         ],
       ),
     );
@@ -134,27 +92,22 @@ class _HelpScreenState extends State<HelpScreen> {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(vertical: 20),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
+          color: color.withOpacity(0.05),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
+          border: Border.all(color: color.withOpacity(0.2)),
         ),
         child: Column(children: [
           Icon(icon, color: color, size: 28),
-          const SizedBox(height: 6),
-          Text(label, style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Text(label, style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.bold)),
         ]),
       ),
     );
   }
-}
-
-class _FaqItem {
-  final String question;
-  final String answer;
-  const _FaqItem(this.question, this.answer);
 }

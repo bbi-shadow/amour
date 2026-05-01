@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Các loại tin nhắn
-enum MessageType { text, image, emoji, sticker, voice, system }
+enum MessageType { text, image, emoji, sticker, voice, system, video_call, voice_call }
 
 class MessageModel {
   final String id;
@@ -13,6 +13,12 @@ class MessageModel {
   final bool seen;
   final DateTime? timestamp;
   final bool isDeleted;
+  final String? replyToText;
+  
+  // Call fields
+  final bool isCallMessage;
+  final String? callStatus;
+  final int? callDuration;
 
   MessageModel({
     required this.id,
@@ -24,6 +30,10 @@ class MessageModel {
     this.seen = false,
     this.timestamp,
     this.isDeleted = false,
+    this.replyToText,
+    this.isCallMessage = false,
+    this.callStatus,
+    this.callDuration,
   });
 
   factory MessageModel.fromFirestore(DocumentSnapshot doc) {
@@ -38,6 +48,10 @@ class MessageModel {
       seen: d['seen'] == true,
       timestamp: d['timestamp'] is Timestamp ? (d['timestamp'] as Timestamp).toDate() : null,
       isDeleted: d['isDeleted'] == true,
+      replyToText: d['replyToText']?.toString(),
+      isCallMessage: d['isCallMessage'] == true,
+      callStatus: d['callStatus']?.toString(),
+      callDuration: d['callDuration'] is num ? (d['callDuration'] as num).toInt() : null,
     );
   }
 
@@ -48,6 +62,8 @@ class MessageModel {
       case 'sticker': return MessageType.sticker;
       case 'voice': return MessageType.voice;
       case 'system': return MessageType.system;
+      case 'video_call': return MessageType.video_call;
+      case 'voice_call': return MessageType.voice_call;
       default: return MessageType.text;
     }
   }
@@ -59,8 +75,12 @@ class MessageModel {
     'type': type.name,
     'mediaUrl': mediaUrl,
     'seen': seen,
-    'timestamp': FieldValue.serverTimestamp(),
+    'timestamp': timestamp != null ? Timestamp.fromDate(timestamp!) : FieldValue.serverTimestamp(),
     'isDeleted': isDeleted,
+    'replyToText': replyToText,
+    'isCallMessage': isCallMessage,
+    'callStatus': callStatus,
+    'callDuration': callDuration,
   };
 }
 

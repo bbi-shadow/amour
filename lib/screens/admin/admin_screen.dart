@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
-import '../../services/firestore_service.dart';
+import '../../controllers/admin_controller.dart';
+import '../../controllers/theme_controller.dart';
 import '../../themes/app_theme.dart';
 import '../../utils/app_constants.dart';
 
@@ -14,6 +14,7 @@ class AdminScreen extends StatefulWidget {
 
 class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final controller = Get.put(AdminController());
 
   @override
   void initState() {
@@ -29,17 +30,19 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    final isDark = ThemeController.to.isDark;
+    
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: isDark ? AppColors.darkBg : const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: const Text('Quản trị Amour', style: TextStyle(fontWeight: FontWeight.w900)),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        title: const Text('Quan tri he thong', style: TextStyle(fontWeight: FontWeight.w900)),
+        backgroundColor: isDark ? AppColors.darkCard : Colors.white,
+        foregroundColor: isDark ? Colors.white : Colors.black,
         elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout_rounded, color: Colors.red),
-            onPressed: () => Get.offAllNamed(AppRoutes.login),
+            onPressed: controller.logout,
           ),
         ],
         bottom: TabBar(
@@ -49,73 +52,56 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           unselectedLabelColor: Colors.grey,
           indicatorColor: AppColors.primary,
           tabs: const [
-            Tab(icon: Icon(Icons.analytics_rounded), text: 'Thống kê'),
-            Tab(icon: Icon(Icons.people_alt_rounded), text: 'Người dùng'),
-            Tab(icon: Icon(Icons.person_add_alt_1_rounded), text: 'Tạo User'),
-            Tab(icon: Icon(Icons.campaign_rounded), text: 'Báo cáo'),
+            Tab(icon: Icon(Icons.analytics_outlined), text: 'Thong ke'),
+            Tab(icon: Icon(Icons.people_outline), text: 'Nguoi dung'),
+            Tab(icon: Icon(Icons.person_add_outlined), text: 'Tao User'),
+            Tab(icon: Icon(Icons.flag_outlined), text: 'Bao cao'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [
-          const _DashboardTab(),
-          const _UsersTab(),
-          const _CreateUserTab(),
-          const _ReportsTab(),
+        children: const [
+          _DashboardTab(),
+          _UsersTab(),
+          _CreateUserTab(),
+          _ReportsTab(),
         ],
       ),
     );
   }
 }
 
+// -- TAB 1: DASHBOARD --
 class _DashboardTab extends StatelessWidget {
   const _DashboardTab();
   
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, int>>(
-      future: FirestoreService.getStats(),
-      builder: (context, snap) {
-        final s = snap.data ?? {'users': 0, 'matches': 0, 'reports': 0, 'posts': 0};
-        return ListView(
-          padding: const EdgeInsets.all(20),
+    final controller = AdminController.to;
+    return Obx(() => ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        const Text("Tong quan", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 20),
+        GridView.count(
+          crossAxisCount: 2, crossAxisSpacing: 15, mainAxisSpacing: 15, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
           children: [
-            const Text("Tổng quan hệ thống", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
-            GridView.count(
-              crossAxisCount: 2, crossAxisSpacing: 15, mainAxisSpacing: 15, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-              children: [
-                _card("Tổng User", "${s['users']}", Icons.person, Colors.blue),
-                _card("Matches", "${s['matches']}", Icons.favorite, Colors.pink),
-                _card("Báo cáo", "${s['reports']}", Icons.warning, Colors.orange),
-                _card("Bài đăng", "${s['posts']}", Icons.chat_bubble, Colors.teal),
-              ],
-            ),
-            const SizedBox(height: 30),
-            // Giữ lại nút dọn dẹp để bạn xóa những gì không cần thiết
-            ElevatedButton.icon(
-              onPressed: () => _confirmClearFakeUsers(context),
-              icon: const Icon(Icons.cleaning_services),
-              label: const Text("DỌN DẸP HỆ THỐNG"),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 15)),
-            ),
+            _card("User", "${controller.stats['users']}", Icons.person_outline, Colors.blue),
+            _card("Matches", "${controller.stats['matches']}", Icons.favorite_border, Colors.pink),
+            _card("Bao cao", "${controller.stats['reports']}", Icons.warning_amber_rounded, Colors.orange),
+            _card("Bai dang", "${controller.stats['posts']}", Icons.chat_bubble_outline, Colors.teal),
           ],
-        );
-      },
-    );
-  }
-
-  void _confirmClearFakeUsers(BuildContext context) async {
-    final confirmed = await AppHelpers.confirm(
-      title: "Xác nhận dọn dẹp", 
-      message: "Xóa sạch các tài khoản thử nghiệm cũ để bắt đầu tạo mới?"
-    );
-    
-    if (confirmed) {
-      await FirestoreService.deleteAllFakeUsers();
-      AppHelpers.showSuccess("Hệ thống đã sạch sẽ!");
-    }
+        ),
+        const SizedBox(height: 32),
+        OutlinedButton.icon(
+          onPressed: controller.clearFakeUsers,
+          icon: const Icon(Icons.cleaning_services_outlined),
+          label: const Text("DON DEP FAKE USERS"),
+          style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.all(16)),
+        ),
+      ],
+    ));
   }
 
   Widget _card(String t, String v, IconData i, Color c) {
@@ -123,18 +109,82 @@ class _DashboardTab extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white, 
         borderRadius: BorderRadius.circular(20), 
-        boxShadow: [BoxShadow(color: c.withValues(alpha: 0.1), blurRadius: 10)]
+        boxShadow: [BoxShadow(color: c.withOpacity(0.05), blurRadius: 10)]
       ),
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         Icon(i, color: c, size: 30),
-        const SizedBox(height: 10),
-        Text(v, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Text(v, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
         Text(t, style: const TextStyle(color: Colors.grey, fontSize: 12)),
       ]),
     );
   }
 }
 
+// -- TAB 2: USER MANAGEMENT --
+class _UsersTab extends StatelessWidget {
+  const _UsersTab();
+  @override
+  Widget build(BuildContext context) {
+    final controller = AdminController.to;
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.all(16),
+        child: TextField(
+          onChanged: (v) => controller.searchQuery.value = v.toLowerCase(),
+          decoration: InputDecoration(
+            hintText: 'Tim kiem theo ten...',
+            prefixIcon: const Icon(Icons.search),
+            filled: true, fillColor: Colors.white,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          ),
+        ),
+      ),
+      Expanded(
+        child: StreamBuilder<QuerySnapshot>(
+          stream: controller.usersStream,
+          builder: (context, snap) {
+            if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+            final docs = snap.data!.docs;
+            
+            return Obx(() {
+              final filtered = docs.where((doc) {
+                final name = (doc['name'] ?? '').toString().toLowerCase();
+                return name.contains(controller.searchQuery.value);
+              }).toList();
+
+              return ListView.builder(
+                itemCount: filtered.length,
+                itemBuilder: (ctx, i) {
+                  final data = filtered[i].data() as Map<String, dynamic>;
+                  final isBanned = data['isBanned'] == true;
+                  return ListTile(
+                    leading: CircleAvatar(backgroundImage: data['photoUrl']?.toString().isNotEmpty == true ? NetworkImage(data['photoUrl']) : null),
+                    title: Text(data['name'] ?? 'User', style: TextStyle(color: isBanned ? Colors.red : Colors.black87)),
+                    subtitle: Text(data['email'] ?? ''),
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (val) {
+                        if (val == 'ban') controller.banUser(filtered[i].id, "Vi pham tieu chuan");
+                        if (val == 'unban') controller.unbanUser(filtered[i].id);
+                        if (val == 'delete') controller.deleteUser(filtered[i].id);
+                      },
+                      itemBuilder: (_) => [
+                        PopupMenuItem(value: isBanned ? 'unban' : 'ban', child: Text(isBanned ? 'Bo cam' : 'Cam user')),
+                        const PopupMenuItem(value: 'delete', child: Text('Xoa vinh vien')),
+                      ],
+                    ),
+                  );
+                },
+              );
+            });
+          },
+        ),
+      ),
+    ]);
+  }
+}
+
+// -- TAB 3: CREATE USER --
 class _CreateUserTab extends StatefulWidget {
   const _CreateUserTab();
   @override
@@ -146,102 +196,70 @@ class _CreateUserTabState extends State<_CreateUserTab> {
   final _pass = TextEditingController();
   final _name = TextEditingController();
   final _age = TextEditingController();
-  final _gender = "Nữ";
-  bool _isSaving = false;
-
-  Future<void> _createRealUser() async {
-    if (_email.text.isEmpty || _pass.text.isEmpty || _name.text.isEmpty) {
-      AppHelpers.showError("Vui lòng điền đủ thông tin");
-      return;
-    }
-    setState(() => _isSaving = true);
-    try {
-      UserCredential credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: _email.text.trim(),
-        password: _pass.text.trim(),
-      );
-      await FirebaseFirestore.instance.collection('users').doc(credential.user!.uid).set({
-        'uid': credential.user!.uid,
-        'name': _name.text,
-        'email': _email.text.trim(),
-        'age': int.tryParse(_age.text) ?? 20,
-        'gender': _gender,
-        'isVerified': true,
-        'createdAt': FieldValue.serverTimestamp(),
-        'isOnline': false,
-        'photos': [],
-        'photoUrl': "https://i.pravatar.cc/300?u=${credential.user!.uid}",
-      });
-      AppHelpers.showSuccess("Tài khoản người dùng thật đã sẵn sàng!");
-      _email.clear(); _pass.clear(); _name.clear(); _age.clear();
-    } catch (e) {
-      AppHelpers.showError("Lỗi: $e");
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
+    final controller = AdminController.to;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       child: Column(children: [
-        const Text("Thông tin đăng nhập mới", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        const SizedBox(height: 15),
-        TextField(controller: _email, decoration: const InputDecoration(labelText: "Email", border: OutlineInputBorder())),
-        const SizedBox(height: 10),
-        TextField(controller: _pass, decoration: const InputDecoration(labelText: "Mật khẩu", border: OutlineInputBorder()), obscureText: true),
-        const SizedBox(height: 10),
-        TextField(controller: _name, decoration: const InputDecoration(labelText: "Tên hiển thị", border: OutlineInputBorder())),
-        const SizedBox(height: 10),
-        TextField(controller: _age, decoration: const InputDecoration(labelText: "Tuổi", border: OutlineInputBorder()), keyboardType: TextInputType.number),
-        const SizedBox(height: 30),
-        SizedBox(
-          width: double.infinity,
-          height: 50,
+        const Text("Tao tai khoan moi", style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 20),
+        TextField(controller: _email, decoration: const InputDecoration(labelText: "Email")),
+        const SizedBox(height: 12),
+        TextField(controller: _pass, decoration: const InputDecoration(labelText: "Mat khau"), obscureText: true),
+        const SizedBox(height: 12),
+        TextField(controller: _name, decoration: const InputDecoration(labelText: "Ten")),
+        const SizedBox(height: 12),
+        TextField(controller: _age, decoration: const InputDecoration(labelText: "Tuoi"), keyboardType: TextInputType.number),
+        const SizedBox(height: 32),
+        Obx(() => SizedBox(
+          width: double.infinity, height: 50,
           child: ElevatedButton(
-            onPressed: _isSaving ? null : _createRealUser, 
-            child: Text(_isSaving ? "Đang tạo..." : "TẠO NGƯỜI DÙNG THẬT")
-          )
-        ),
+            onPressed: controller.isCreatingUser.value ? null : () {
+              controller.createUser(
+                email: _email.text, password: _pass.text, 
+                name: _name.text, age: int.tryParse(_age.text) ?? 20, 
+                gender: "Nu"
+              );
+            }, 
+            child: controller.isCreatingUser.value ? const CircularProgressIndicator() : const Text("TAO TAI KHOAN")
+          ),
+        )),
       ]),
     );
   }
 }
 
-class _UsersTab extends StatelessWidget {
-  const _UsersTab();
+// -- TAB 4: REPORTS --
+class _ReportsTab extends StatelessWidget {
+  const _ReportsTab();
   @override
   Widget build(BuildContext context) {
+    final controller = AdminController.to;
     return StreamBuilder<QuerySnapshot>(
-      stream: FirestoreService.getAllUsersStream(),
+      stream: FirebaseFirestore.instance.collection(AppConstants.colReports).orderBy('createdAt', descending: true).snapshots(),
       builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-        final docs = snap.data?.docs ?? [];
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final docs = snap.data!.docs;
+        if (docs.isEmpty) return const Center(child: Text("Khong co bao cao nao"));
+
         return ListView.builder(
           itemCount: docs.length,
-          itemBuilder: (context, i) {
+          itemBuilder: (ctx, i) {
             final data = docs[i].data() as Map<String, dynamic>;
+            final isResolved = data['isResolved'] == true;
             return ListTile(
-              leading: CircleAvatar(
-                backgroundImage: (data['photoUrl'] != null && data['photoUrl'].toString().isNotEmpty) 
-                  ? NetworkImage(data['photoUrl']) : null,
-                child: data['photoUrl'] == null ? const Icon(Icons.person) : null,
+              leading: Icon(Icons.report_problem_outlined, color: isResolved ? Colors.green : Colors.red),
+              title: Text(data['reason'] ?? 'Bao cao vi pham'),
+              trailing: isResolved ? const Icon(Icons.check_circle_outline) : TextButton(
+                onPressed: () => controller.resolveReport(docs[i].id),
+                child: const Text("XU LY"),
               ),
-              title: Text(data['name'] ?? "Không tên"),
-              subtitle: Text(data['email'] ?? "Chưa có email"),
             );
           },
         );
       },
     );
-  }
-}
-
-class _ReportsTab extends StatelessWidget {
-  const _ReportsTab();
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text("Danh sách báo cáo vi phạm"));
   }
 }

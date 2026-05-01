@@ -1,74 +1,66 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../models/models.dart';
-import '../../services/firestore_service.dart';
-import '../../themes/app_theme.dart';
-import '../../utils/app_constants.dart';
+import 'package:get/get.dart';
+import '../controllers/notification_controller.dart';
+import '../controllers/theme_controller.dart';
+import '../models/notification_model.dart';
+import '../themes/app_theme.dart';
+import '../utils/app_constants.dart';
 
-/// ══════════════════════════════════════════════════════════════
-/// NotificationsScreen — Danh sách thông báo
-/// ══════════════════════════════════════════════════════════════
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF8F9),
-      appBar: AppBar(
-        title: const Text('Thông báo', style: TextStyle(fontWeight: FontWeight.w800)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        foregroundColor: AppColors.lightText,
-        actions: [
-          TextButton(
-            onPressed: () => _markAllRead(),
-            child: const Text('Đọc tất cả',
-                style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirestoreService.getNotificationsStream(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.primary));
-          }
+    final controller = Get.put(NotificationController());
 
-          final docs = snapshot.data?.docs ?? [];
-          if (docs.isEmpty) return _buildEmpty();
+    return Obx(() {
+      final isDark = ThemeController.to.isDark;
+      final bgColor = isDark ? AppColors.darkBg : const Color(0xFFF8F9FE);
+      final textColor = isDark ? Colors.white : AppColors.lightText;
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: docs.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, i) {
-              final notif = NotificationModel.fromFirestore(docs[i]);
-              return _NotifTile(notif: notif);
-            },
-          );
-        },
-      ),
+      return Scaffold(
+        backgroundColor: bgColor,
+        appBar: AppBar(
+          title: const Text('Thong bao', style: TextStyle(fontWeight: FontWeight.w800)),
+          backgroundColor: isDark ? AppColors.darkCard : Colors.white,
+          elevation: 0,
+          foregroundColor: textColor,
+          actions: [
+            TextButton(
+              onPressed: controller.markAllAsRead,
+              child: const Text('Doc tat ca', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+        body: controller.isLoading.value
+            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            : controller.notifications.isEmpty
+                ? _buildEmpty(isDark)
+                : _buildList(controller, isDark),
+      );
+    });
+  }
+
+  Widget _buildList(NotificationController controller, bool isDark) {
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: controller.notifications.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, i) {
+        final notif = controller.notifications[i];
+        return _NotifTile(notif: notif, isDark: isDark);
+      },
     );
   }
 
-  Future<void> _markAllRead() async {
-    // TODO: batch update all isRead = true
-  }
-
-  Widget _buildEmpty() {
-    return const Center(
+  Widget _buildEmpty(bool isDark) {
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text('🔔', style: TextStyle(fontSize: 56)),
-          SizedBox(height: 16),
-          Text('Chưa có thông báo', style: TextStyle(
-              fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.lightText)),
-          SizedBox(height: 8),
-          Text('Khi có match hoặc tin nhắn mới,\nbạn sẽ thấy ở đây.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.lightSubtext, fontSize: 14)),
+          Icon(Icons.notifications_none_rounded, size: 64, color: isDark ? Colors.white10 : Colors.grey.shade200),
+          const SizedBox(height: 16),
+          const Text('Chua co thong bao', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey)),
         ],
       ),
     );
@@ -77,97 +69,84 @@ class NotificationsScreen extends StatelessWidget {
 
 class _NotifTile extends StatelessWidget {
   final NotificationModel notif;
-  const _NotifTile({required this.notif});
+  final bool isDark;
 
-  Color get _typeColor {
-    switch (notif.type) {
-      case NotificationType.match: return const Color(0xFFFF4B6E);
-      case NotificationType.message: return const Color(0xFF667EEA);
-      case NotificationType.like: return const Color(0xFFFF6B35);
-      case NotificationType.superLike: return const Color(0xFF00BCD4);
-      case NotificationType.visit: return const Color(0xFF9B59B6);
-      default: return Colors.grey;
-    }
-  }
-
-  String get _typeEmoji {
-    switch (notif.type) {
-      case NotificationType.match: return '💕';
-      case NotificationType.message: return '💬';
-      case NotificationType.like: return '❤️';
-      case NotificationType.superLike: return '⭐';
-      case NotificationType.visit: return '👀';
-      default: return '🔔';
-    }
-  }
+  const _NotifTile({required this.notif, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
+    final typeColor = _getTypeColor(notif.type);
+    final icon = _getTypeIcon(notif.type);
+
     return GestureDetector(
-      onTap: () => FirestoreService.markNotificationRead(notif.id),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+      onTap: () {
+        NotificationController.to.markAsRead(notif.id);
+        _handleNavigation(notif);
+      },
+      child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: notif.isRead ? Colors.white : _typeColor.withOpacity(0.05),
+          color: notif.isRead ? (isDark ? AppColors.darkCard : Colors.white) : typeColor.withOpacity(0.05),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: notif.isRead ? Colors.grey.shade100 : _typeColor.withOpacity(0.3),
-            width: 1.5,
-          ),
+          border: Border.all(color: notif.isRead ? Colors.transparent : typeColor.withOpacity(0.2)),
         ),
         child: Row(children: [
-          // Avatar
-          Stack(children: [
-            Container(
-              width: 52, height: 52,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                image: notif.fromUserPhoto.isNotEmpty
-                    ? DecorationImage(image: NetworkImage(notif.fromUserPhoto), fit: BoxFit.cover)
-                    : null,
-                color: notif.fromUserPhoto.isEmpty ? _typeColor.withOpacity(0.15) : null,
-              ),
-              child: notif.fromUserPhoto.isEmpty
-                  ? Center(child: Text(_typeEmoji, style: const TextStyle(fontSize: 24)))
-                  : null,
-            ),
-            Positioned(bottom: 0, right: 0,
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(color: _typeColor, shape: BoxShape.circle),
-                child: Text(_typeEmoji, style: const TextStyle(fontSize: 10)),
-              ),
-            ),
-          ]),
+          CircleAvatar(
+            radius: 24,
+            backgroundImage: notif.fromUserPhoto.isNotEmpty ? NetworkImage(notif.fromUserPhoto) : null,
+            backgroundColor: typeColor.withOpacity(0.1),
+            child: notif.fromUserPhoto.isEmpty ? Icon(icon, color: typeColor) : null,
+          ),
           const SizedBox(width: 12),
-
-          // Content
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Expanded(child: Text(notif.title, style: TextStyle(
-                  fontWeight: notif.isRead ? FontWeight.w600 : FontWeight.w800,
-                  fontSize: 14,
-                  color: AppColors.lightText,
-                ))),
-                if (!notif.isRead)
-                  Container(
-                    width: 8, height: 8,
-                    decoration: BoxDecoration(color: _typeColor, shape: BoxShape.circle),
-                  ),
-              ]),
-              const SizedBox(height: 4),
-              Text(notif.body, style: const TextStyle(
-                  color: AppColors.lightSubtext, fontSize: 13, height: 1.4)),
-              const SizedBox(height: 4),
-              Text(AppHelpers.timeAgo(notif.createdAt),
-                  style: const TextStyle(color: Color(0xFFBBBBBB), fontSize: 11)),
-            ],
-          )),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(notif.title, style: TextStyle(fontWeight: notif.isRead ? FontWeight.w600 : FontWeight.w800, fontSize: 14)),
+                const SizedBox(height: 2),
+                Text(notif.body, style: TextStyle(color: isDark ? Colors.white60 : Colors.black54, fontSize: 13)),
+                const SizedBox(height: 4),
+                Text(AppHelpers.timeAgo(notif.createdAt), style: const TextStyle(color: Colors.grey, fontSize: 11)),
+              ],
+            ),
+          ),
         ]),
       ),
     );
+  }
+
+  void _handleNavigation(NotificationModel notif) {
+    switch (notif.type) {
+      case NotificationType.message:
+        final convId = notif.extra?['conversationId'] as String?;
+        if (convId != null) {
+          Get.toNamed(AppRoutes.chatDetail, arguments: {
+            'conversationId': convId,
+            'otherUserId': notif.fromUserId,
+            'otherUserName': notif.title,
+          });
+        }
+        break;
+      default:
+        Get.toNamed(AppRoutes.home);
+    }
+  }
+
+  Color _getTypeColor(NotificationType type) {
+    switch (type) {
+      case NotificationType.match: return Colors.pink;
+      case NotificationType.message: return Colors.blue;
+      case NotificationType.like: return Colors.orange;
+      default: return AppColors.primary;
+    }
+  }
+
+  IconData _getTypeIcon(NotificationType type) {
+    switch (type) {
+      case NotificationType.match: return Icons.favorite;
+      case NotificationType.message: return Icons.chat_bubble_outline;
+      case NotificationType.like: return Icons.thumb_up_outlined;
+      default: return Icons.notifications;
+    }
   }
 }

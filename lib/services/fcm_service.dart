@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart'; // ✅ Dùng kIsWeb thay cho Platform
+import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -17,23 +17,16 @@ class FCMService {
   static final _firestore = FirebaseFirestore.instance;
 
   static Future<void> init() async {
-    // 🛡️ KIỂM TRA NỀN TẢNG AN TOÀN: 
-    // FCM (Thông báo đẩy) hiện chỉ hỗ trợ Android và iOS trong cấu hình này.
-    // Nếu chạy trên Web hoặc Windows/MacOS sẽ bỏ qua để không gây lỗi.
-    if (kIsWeb) {
-      debugPrint('FCM không được hỗ trợ trên Web.');
-      return;
-    }
+    if (kIsWeb) return;
 
     try {
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-      final settings = await _messaging.requestPermission(
+      await _messaging.requestPermission(
         alert: true,
         badge: true,
         sound: true,
       );
-      debugPrint('FCM permission: ${settings.authorizationStatus}');
 
       await _saveToken();
 
@@ -44,7 +37,7 @@ class FCMService {
       final initialMessage = await _messaging.getInitialMessage();
       if (initialMessage != null) _handleNotificationTap(initialMessage);
     } catch (e) {
-      debugPrint('Bỏ qua khởi tạo FCM trên nền tảng này.');
+      debugPrint('FCM Init Error: $e');
     }
   }
 
@@ -56,7 +49,7 @@ class FCMService {
       final token = await _messaging.getToken();
       if (token != null) await _updateToken(token);
     } catch (e) {
-      debugPrint('Không lấy được FCM Token');
+      debugPrint('Error getting token');
     }
   }
 
@@ -81,14 +74,10 @@ class FCMService {
       colorText: const Color(0xFF1A1A1A),
       margin: const EdgeInsets.all(12),
       borderRadius: 14,
-      icon: const Padding(
-        padding: EdgeInsets.all(8),
-        child: Text('💕', style: TextStyle(fontSize: 24)),
-      ),
+      icon: const Icon(Icons.favorite_rounded, color: AppColors.primary, size: 24),
       mainButton: TextButton(
         onPressed: () => _navigate(message.data),
-        child: const Text('Xem', style: TextStyle(
-            color: AppColors.primary, fontWeight: FontWeight.w700)),
+        child: const Text('Xem', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700)),
       ),
     );
   }

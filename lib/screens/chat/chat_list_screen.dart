@@ -1,166 +1,202 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
-import '../../models/user_model.dart';
-import '../../services/firestore_service.dart';
+import '../../controllers/chat_list_controller.dart';
+import '../../controllers/theme_controller.dart';
 import '../../themes/app_theme.dart';
+import '../../utils/app_constants.dart';
 import 'chat_detail_screen.dart';
 
-class ChatListScreen extends StatefulWidget {
+class ChatListScreen extends StatelessWidget {
   const ChatListScreen({super.key});
-  @override
-  State<ChatListScreen> createState() => _ChatListScreenState();
-}
-
-class _ChatListScreenState extends State<ChatListScreen> {
-  final _uid = FirebaseAuth.instance.currentUser!.uid;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: const Text('Tin nhắn', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 24)),
-      ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirestoreService.getConversationsStream(),
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-          final allDocs = snap.data?.docs ?? [];
-          if (allDocs.isEmpty) return _buildEmpty();
+    final controller = Get.put(ChatListController());
 
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            itemCount: allDocs.length,
-            itemBuilder: (context, i) => _ConversationTile(doc: allDocs[i], currentUid: _uid),
+    return Obx(() {
+      final isDark = ThemeController.to.isDark;
+      final bgColor = isDark ? AppColors.darkBg : const Color(0xFFF8F9FE);
+      final textColor = isDark ? Colors.white : Colors.black;
+
+      return Scaffold(
+        backgroundColor: bgColor,
+        appBar: _buildAppBar(context, controller, isDark, textColor, bgColor),
+        body: controller.isLoading.value
+            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            : controller.allConversations.isEmpty
+                ? _buildEmpty(isDark)
+                : _buildBody(context, controller, isDark),
+      );
+    });
+  }
+
+  Widget _buildBody(BuildContext context, ChatListController controller, bool isDark) {
+    final filtered = controller.filteredConversations;
+
+    return CustomScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      slivers: [
+        SliverToBoxAdapter(child: _buildSearchBarPlaceholder(context, controller, isDark)),
+
+        if (controller.isSearching.value) ...[
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Text(
+                filtered.isEmpty ? 'Khong tim thay ket qua' : '${filtered.length} ket qua',
+                style: TextStyle(fontSize: 12, color: isDark ? Colors.white38 : Colors.grey),
+              ),
+            ),
+          ),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (ctx, i) => _buildConversationTile(controller, filtered[i], isDark),
+              childCount: filtered.length,
+            ),
+          ),
+        ] else ...[
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
+              child: Text('BAN BE MOI',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: isDark ? Colors.white38 : Colors.grey, letterSpacing: 0.8)),
+            ),
+          ),
+          SliverToBoxAdapter(child: _buildMatchBubbles(controller, isDark)),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+              child: Text('TIN NHAN',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: isDark ? Colors.white38 : Colors.grey, letterSpacing: 0.8)),
+            ),
+          ),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (ctx, i) => _buildConversationTile(controller, controller.allConversations[i], isDark),
+              childCount: controller.allConversations.length,
+            ),
+          ),
+        ],
+        const SliverToBoxAdapter(child: SizedBox(height: 80)),
+      ],
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(BuildContext context, ChatListController controller, bool isDark, Color textColor, Color bgColor) {
+    return AppBar(
+      backgroundColor: bgColor,
+      elevation: 0,
+      title: controller.isSearching.value
+          ? TextField(
+              onChanged: controller.updateSearch,
+              autofocus: true,
+              style: TextStyle(color: textColor, fontSize: 16),
+              decoration: const InputDecoration(hintText: 'Tim ten ban be...', border: InputBorder.none),
+            )
+          : Text('Tin nhan', style: TextStyle(color: textColor, fontWeight: FontWeight.w900, fontSize: 24)),
+      actions: [
+        IconButton(
+          icon: Icon(controller.isSearching.value ? Icons.close : Icons.search, color: isDark ? Colors.white70 : Colors.black87),
+          onPressed: controller.toggleSearch,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchBarPlaceholder(BuildContext context, ChatListController controller, bool isDark) {
+    if (controller.isSearching.value) return const SizedBox.shrink();
+    return GestureDetector(
+      onTap: controller.toggleSearch,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(color: isDark ? AppColors.darkCard : const Color(0xFFF5F5F5), borderRadius: BorderRadius.circular(14)),
+        child: Row(children: [
+          Icon(Icons.search, color: isDark ? Colors.white38 : Colors.grey, size: 18),
+          const SizedBox(width: 10),
+          Text('Tim kiem...', style: TextStyle(fontSize: 14, color: isDark ? Colors.white38 : Colors.grey)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildMatchBubbles(ChatListController controller, bool isDark) {
+    return SizedBox(
+      height: 90,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: controller.allConversations.length,
+        itemBuilder: (context, i) {
+          final otherUid = controller.getOtherUidFromDoc(controller.allConversations[i]);
+          final user = controller.getCachedUser(otherUid);
+          if (user == null) return const SizedBox.shrink();
+
+          return GestureDetector(
+            onTap: () => _openChat(controller.allConversations[i].id, user),
+            child: Container(
+              margin: const EdgeInsets.only(right: 14),
+              child: Column(
+                children: [
+                  Stack(children: [
+                    CircleAvatar(
+                      radius: 28,
+                      backgroundImage: user.photoUrl.isNotEmpty ? NetworkImage(user.photoUrl) : null,
+                      child: user.photoUrl.isEmpty ? Text(user.name[0]) : null,
+                    ),
+                    if (user.isOnline)
+                      Positioned(right: 0, bottom: 0, child: Container(width: 12, height: 12, decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle, border: Border.all(color: isDark ? AppColors.darkBg : Colors.white, width: 2)))),
+                  ]),
+                  const SizedBox(height: 4),
+                  Text(user.name, style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black87), overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
           );
         },
       ),
     );
   }
 
-  Widget _buildEmpty() => Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-    const Text('💬', style: TextStyle(fontSize: 60)),
-    const SizedBox(height: 16),
-    const Text('Chưa có trò chuyện nào', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.grey)),
-  ]));
-}
+  Widget _buildConversationTile(ChatListController controller, dynamic doc, bool isDark) {
+    final otherUid = controller.getOtherUidFromDoc(doc);
+    final user = controller.getCachedUser(otherUid);
+    if (user == null) return const SizedBox.shrink();
 
-class _ConversationTile extends StatelessWidget {
-  final QueryDocumentSnapshot doc;
-  final String currentUid;
-
-  const _ConversationTile({required this.doc, required this.currentUid});
-
-  @override
-  Widget build(BuildContext context) {
     final data = doc.data() as Map<String, dynamic>;
-    final participants = List<String>.from(data['participants']);
-    final otherUid = participants.firstWhere((p) => p != currentUid);
-    final unreadCount = (data['unreadCount']?[currentUid] ?? 0) as int;
-
-    // ✅ Sử dụng StreamBuilder để lắng nghe trạng thái Online của đối phương thời gian thực
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(otherUid).snapshots(),
-      builder: (context, userSnap) {
-        if (!userSnap.hasData) return const SizedBox.shrink();
-        final user = UserModel.fromFirestore(userSnap.data!);
-
-        return ListTile(
-          onTap: () {
-            // ✅ Khi nhấn vào, đánh dấu đã xem ngay lập tức
-            FirestoreService.markMessagesAsSeen(doc.id);
-            Get.to(() => ChatDetailScreen(
-              conversationId: doc.id,
-              otherUserId: user.uid,
-              otherUserName: user.name,
-              otherUserPhotoUrl: user.photoUrl,
-            ));
-          },
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          leading: Stack(
-            children: [
-              CircleAvatar(
-                radius: 30, 
-                backgroundImage: user.photoUrl.isNotEmpty ? NetworkImage(user.photoUrl) : null, 
-                backgroundColor: Colors.grey[200],
-                child: user.photoUrl.isEmpty ? const Icon(Icons.person, color: Colors.grey) : null,
-              ),
-              // ✅ Chấm xanh Online động
-              if (user.isOnline)
-                Positioned(
-                  bottom: 0, 
-                  right: 0, 
-                  child: Container(
-                    width: 16, 
-                    height: 16, 
-                    decoration: BoxDecoration(
-                      color: Colors.green, 
-                      shape: BoxShape.circle, 
-                      border: Border.all(color: Colors.white, width: 3)
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          title: Text(
-            user.name, 
-            style: TextStyle(
-              fontWeight: unreadCount > 0 ? FontWeight.w900 : FontWeight.w700, 
-              fontSize: 16, 
-              color: unreadCount > 0 ? Colors.black : Colors.black87
-            )
-          ),
-          subtitle: Text(
-            data['lastMessage'] ?? 'Bắt đầu trò chuyện ngay...',
-            maxLines: 1, 
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: unreadCount > 0 ? Colors.black : Colors.grey[600], 
-              fontWeight: unreadCount > 0 ? FontWeight.w700 : FontWeight.normal
-            ),
-          ),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                _formatTime(data['lastMessageTime']), 
-                style: TextStyle(
-                  color: unreadCount > 0 ? AppColors.primary : Colors.grey, 
-                  fontSize: 12, 
-                  fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.normal
-                )
-              ),
-              // ✅ Badge thông báo số tin nhắn chưa đọc
-              if (unreadCount > 0)
-                Container(
-                  margin: const EdgeInsets.only(top: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary, 
-                    borderRadius: BorderRadius.circular(12)
-                  ),
-                  child: Text(
-                    '$unreadCount', 
-                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
+    return ListTile(
+      onTap: () => _openChat(doc.id, user),
+      leading: Stack(children: [
+        CircleAvatar(
+          radius: 26,
+          backgroundImage: user.photoUrl.isNotEmpty ? NetworkImage(user.photoUrl) : null,
+          child: user.photoUrl.isEmpty ? Text(user.name[0]) : null,
+        ),
+        if (user.isOnline)
+          Positioned(right: 0, bottom: 0, child: Container(width: 12, height: 12, decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle, border: Border.all(color: isDark ? AppColors.darkBg : Colors.white, width: 2)))),
+      ]),
+      title: Text(user.name, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+      subtitle: Text(data['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: isDark ? Colors.white38 : Colors.grey)),
+      trailing: Text(AppHelpers.timeAgo(data['lastMessageTime']?.toDate()), style: const TextStyle(fontSize: 11, color: Colors.grey)),
     );
   }
 
-  String _formatTime(dynamic ts) {
-    if (ts == null) return '';
-    final d = (ts as Timestamp).toDate();
-    final now = DateTime.now();
-    if (now.difference(d).inDays == 0) return '${d.hour}:${d.minute.toString().padLeft(2, '0')}';
-    return '${d.day}/${d.month}';
+  void _openChat(String convId, dynamic user) {
+    Get.to(() => ChatDetailScreen(
+      conversationId: convId,
+      otherUserId: user.uid,
+      otherUserName: user.name,
+      otherUserPhotoUrl: user.photoUrl,
+    ));
+  }
+
+  Widget _buildEmpty(bool isDark) {
+    return Center(
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(Icons.chat_bubble_outline, size: 64, color: isDark ? Colors.white10 : Colors.grey.shade200),
+        const SizedBox(height: 16),
+        const Text('Chua co tin nhan', style: TextStyle(color: Colors.grey)),
+      ]),
+    );
   }
 }

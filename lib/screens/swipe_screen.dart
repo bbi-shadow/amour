@@ -1,234 +1,226 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
+import '../controllers/swipe_controller.dart';
+import '../controllers/theme_controller.dart';
 import '../models/user_model.dart';
-import '../services/firestore_service.dart';
 import '../themes/app_theme.dart';
+import '../utils/app_constants.dart';
 import '../widgets/cached_photo_widget.dart';
-import '../widgets/match_popup.dart';
+import '../widgets/match_dialog.dart'; // Đã đổi import
 import 'profile_detail_screen.dart';
 
 class SwipeScreen extends StatefulWidget {
+  const SwipeScreen({super.key});
   @override
-  _SwipeScreenState createState() => _SwipeScreenState();
+  State<SwipeScreen> createState() => _SwipeScreenState();
 }
 
 class _SwipeScreenState extends State<SwipeScreen> with TickerProviderStateMixin {
-  final _uid = FirebaseAuth.instance.currentUser!.uid;
-  List<UserModel> _profiles = [];
-  int _currentIndex = 0;
-  bool _isLoading = true;
-  bool _isSwiping = false;
-
-  // Animation controllers cho các nút
-  late AnimationController _likeController;
-  bool _isLiked = false;
+  final controller = Get.put(SwipeController());
+  
+  late AnimationController _cardCtrl;
+  late Animation<Offset> _cardSlide;
+  late Animation<double> _cardFade;
 
   @override
   void initState() {
     super.initState();
-    _likeController = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
-    _loadProfiles();
+    _cardCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
+    _cardSlide = Tween<Offset>(begin: Offset.zero, end: const Offset(1.5, 0))
+        .animate(CurvedAnimation(parent: _cardCtrl, curve: Curves.easeInOut));
+    _cardFade = Tween<double>(begin: 1.0, end: 0.0)
+        .animate(CurvedAnimation(parent: _cardCtrl, curve: Curves.easeIn));
   }
 
-  Future<void> _loadProfiles() async {
-    setState(() => _isLoading = true);
-    try {
-      // 🧠 Gọi thuật toán Recommendation từ FirestoreService
-      final profiles = await FirestoreService.getDiscoveryProfiles();
-      setState(() {
-        _profiles = profiles;
-        _currentIndex = 0;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
-    }
+  @override
+  void dispose() {
+    _cardCtrl.dispose();
+    super.dispose();
   }
 
-  Future<void> _handleSwipe(bool isLike) async {
-    if (_currentIndex >= _profiles.length || _isSwiping) return;
+  Future<void> _onSwipe(bool isLike) async {
+    if (controller.currentProfile == null) return;
     
-    final target = _profiles[_currentIndex];
+    // Animation logic
     if (isLike) {
-      setState(() => _isLiked = true);
-      _likeController.forward().then((_) => _likeController.reverse());
+      _cardSlide = Tween<Offset>(begin: Offset.zero, end: const Offset(1.5, -0.2))
+          .animate(CurvedAnimation(parent: _cardCtrl, curve: Curves.easeOut));
       HapticFeedback.mediumImpact();
+    } else {
+      _cardSlide = Tween<Offset>(begin: Offset.zero, end: const Offset(-1.5, -0.2))
+          .animate(CurvedAnimation(parent: _cardCtrl, curve: Curves.easeOut));
+      HapticFeedback.lightImpact();
     }
 
-    setState(() => _isSwiping = true);
+    await _cardCtrl.forward();
+    _cardCtrl.reset();
 
-    // Lưu hành động vào database
-    final isMatch = await FirestoreService.recordSwipe(targetUid: target.uid, isLike: isLike);
+    // Business logic
+    final profile = controller.currentProfile!;
+    final isMatch = await controller.handleSwipe(isLike);
     
     if (isMatch && mounted) {
-      final matchId = ([_uid, target.uid]..sort()).join('_');
-      MatchPopup.show(context, matchedUser: target, matchId: matchId, currentUserName: 'Bạn');
-    }
-
-    await Future.delayed(const Duration(milliseconds: 300));
-    if (mounted) {
-      setState(() {
-        _currentIndex++;
-        _isSwiping = false;
-        _isLiked = false;
-      });
+      final matchId = ([controller.uid, profile.uid]..sort()).join('_');
+      // Sử dụng MatchDialog.show thay cho MatchPopup
+      MatchDialog.show(context, matchedUser: profile, matchId: matchId, currentUserName: 'Ban');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator(color: AppColors.primary));
-    if (_profiles.isEmpty || _currentIndex >= _profiles.length) return _buildEmptyState();
+    return Obx(() {
+      final isDark = ThemeController.to.isDark;
+      final bgColor = isDark ? AppColors.darkBg : const Color(0xFFF8F0F2);
 
-    final user = _profiles[_currentIndex];
+      if (controller.isLoading.value) {
+        return Scaffold(backgroundColor: bgColor, body: const Center(child: CircularProgressIndicator(color: AppColors.primary)));
+      }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F0F2),
-      body: Column(
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
-              child: GestureDetector(
-                onTap: () => Get.to(() => ProfileDetailScreen(user: user)),
-                child: Stack(
-                  children: [
-                    _buildProfileCard(user),
-                    _buildTopOverlay(user),
-                  ],
-                ),
+      if (controller.currentProfile == null) {
+        return _buildEmptyState(isDark);
+      }
+
+      final user = controller.currentProfile!;
+      final nextUser = controller.nextProfile;
+
+      return Scaffold(
+        backgroundColor: bgColor,
+        body: SafeArea(
+          child: Column(children: [
+            _buildHeader(isDark),
+            _buildFilterChips(isDark),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Stack(children: [
+                  if (nextUser != null) _buildCard(nextUser, isDark, isBehind: true),
+                  SlideTransition(
+                    position: _cardSlide,
+                    child: FadeTransition(
+                      opacity: _cardFade,
+                      child: GestureDetector(
+                        onTap: () => Get.to(() => ProfileDetailScreen(user: user)),
+                        child: _buildCard(user, isDark),
+                      ),
+                    ),
+                  ),
+                ]),
               ),
             ),
-          ),
-          _buildActionButtons(),
-          const SizedBox(height: 20),
-        ],
-      ),
+            _buildActionButtons(isDark),
+            const SizedBox(height: 20),
+          ]),
+        ),
+      );
+    });
+  }
+
+  Widget _buildHeader(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Row(children: [
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Hen Ho', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87)),
+          Text('Goi y phu hop nhat cho ban', style: TextStyle(fontSize: 12, color: isDark ? Colors.white38 : Colors.grey)),
+        ]),
+        const Spacer(),
+        IconButton(icon: const Icon(Icons.tune_rounded), onPressed: () {}),
+      ]),
     );
   }
 
-  Widget _buildProfileCard(UserModel user) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 10))],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(30),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            CachedPhotoWidget(uid: user.uid, photoUrl: user.photoUrl, fit: BoxFit.cover),
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black.withValues(alpha: 0.8)],
-                    stops: const [0.6, 1.0],
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 25, left: 20, right: 20,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Text('${user.name}, ${user.age}', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 8),
-                    if (user.zodiac.isNotEmpty) Text(user.zodiac, style: const TextStyle(fontSize: 22)),
-                  ]),
-                  const SizedBox(height: 5),
-                  Row(children: [
-                    const Icon(Icons.location_on, color: Colors.white70, size: 16),
-                    const SizedBox(width: 4),
-                    Text(user.city, style: const TextStyle(color: Colors.white70, fontSize: 16)),
-                  ]),
-                  const SizedBox(height: 12),
-                  // Hiển thị sở thích
-                  Wrap(spacing: 8, children: user.interests.take(3).map((i) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(10)),
-                    child: Text(i, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                  )).toList()),
-                ],
-              ),
-            ),
-          ],
+  Widget _buildFilterChips(bool isDark) {
+    final chips = ['Gan day', 'Tuoi: 18-30', 'So thich'];
+    return SizedBox(
+      height: 34,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: chips.length,
+        itemBuilder: (ctx, i) => Container(
+          margin: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: i == 0 ? AppColors.primary : Colors.grey.withOpacity(0.2)),
+          ),
+          child: Text(chips[i], style: TextStyle(fontSize: 12, color: i == 0 ? AppColors.primary : Colors.grey, fontWeight: FontWeight.w600)),
         ),
       ),
     );
   }
 
-  Widget _buildTopOverlay(UserModel user) {
-    return Positioned(
-      top: 15, right: 15,
+  Widget _buildCard(UserModel user, bool isDark, {bool isBehind = false}) {
+    return AnimatedScale(
+      scale: isBehind ? 0.95 : 1.0,
+      duration: const Duration(milliseconds: 300),
       child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), shape: BoxShape.circle),
-        child: const Icon(Icons.info_outline, color: Colors.white, size: 20),
-      ),
-    );
-  }
-
-  Widget _buildActionButtons() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Nút X (Dislike)
-          _circleBtn(Icons.close_rounded, Colors.red, () => _handleSwipe(false)),
-          
-          // Nút Tim (Like) - Nâng cấp màu sắc
-          ScaleTransition(
-            scale: Tween<double>(begin: 1.0, end: 1.2).animate(CurvedAnimation(parent: _likeController, curve: Curves.elasticOut)),
-            child: GestureDetector(
-              onTap: () => _handleSwipe(true),
-              child: Container(
-                width: 75, height: 75,
-                decoration: BoxDecoration(
-                  color: Colors.white, shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: (_isLiked ? Colors.pink : Colors.black).withValues(alpha: 0.1), blurRadius: 15)],
-                ),
-                child: Icon(
-                  _isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                  color: _isLiked ? Colors.pink : Colors.black87, // Đen khi chưa tim, đỏ khi đã tim
-                  size: 38,
-                ),
-              ),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(isBehind ? 0.05 : 0.15), blurRadius: 20, offset: const Offset(0, 8))],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: Stack(fit: StackFit.expand, children: [
+            CachedPhotoWidget(uid: user.uid, photoUrl: user.photoUrl, fit: BoxFit.cover),
+            Positioned.fill(child: Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black.withOpacity(0.85)], stops: const [0.5, 1.0])))),
+            Positioned(
+              bottom: 24, left: 24, right: 24,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${user.name}, ${user.age}', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900)),
+                Row(children: [
+                  const Icon(Icons.location_on_rounded, color: Colors.white70, size: 14),
+                  const SizedBox(width: 4),
+                  Text(user.city, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                ]),
+                const SizedBox(height: 12),
+                Wrap(spacing: 8, children: user.interests.take(3).map((i) => Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(20)), child: Text(i, style: const TextStyle(color: Colors.white, fontSize: 12)))).toList()),
+              ]),
             ),
-          ),
-
-          // Nút Star (Super Like)
-          _circleBtn(Icons.star_rounded, Colors.blue, () {}),
-        ],
+          ]),
+        ),
       ),
     );
   }
 
-  Widget _circleBtn(IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildActionButtons(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 40),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+        _circleBtn(Icons.close_rounded, Colors.red, () => _onSwipe(false), small: false),
+        _circleBtn(Icons.star_rounded, Colors.blue, () {}, small: true),
+        _circleBtn(Icons.favorite_rounded, Colors.green, () => _onSwipe(true), small: false),
+        _circleBtn(Icons.replay_rounded, Colors.orange, controller.undo, small: true),
+      ]),
+    );
+  }
+
+  Widget _circleBtn(IconData icon, Color color, VoidCallback onTap, {required bool small}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 60, height: 60,
-        decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)]),
-        child: Icon(icon, color: color, size: 30),
+        width: small ? 50 : 64,
+        height: small ? 50 : 64,
+        decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))]),
+        child: Icon(icon, color: color, size: small ? 24 : 32),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      const Text('💫', style: TextStyle(fontSize: 60)),
-      const SizedBox(height: 15),
-      const Text('Hết người để quẹt rồi!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-      TextButton(onPressed: _loadProfiles, child: const Text('Tải lại', style: TextStyle(color: AppColors.primary))),
-    ]));
+  Widget _buildEmptyState(bool isDark) {
+    return Scaffold(
+      backgroundColor: isDark ? AppColors.darkBg : Colors.white,
+      body: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        const Icon(Icons.favorite_border_rounded, size: 80, color: Colors.grey),
+        const SizedBox(height: 24),
+        const Text('Het nguoi de quet roi!', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        const Text('Hay quay lai sau nhe', style: TextStyle(color: Colors.grey)),
+        const SizedBox(height: 32),
+        ElevatedButton(onPressed: controller.loadProfiles, child: const Text('Tai lai')),
+      ])),
+    );
   }
 }

@@ -1,243 +1,231 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:get/get.dart';
-import '../../themes/app_theme.dart';
-import '../../utils/app_constants.dart';
-import '../../services/firestore_service.dart';
-import '../../services/upload_service.dart';
+import 'package:image_picker/image_picker.dart';
+import '../controllers/edit_profile_controller.dart';
+import '../controllers/theme_controller.dart';
+import '../themes/app_theme.dart';
+import '../utils/app_constants.dart';
 
-class EditProfileScreen extends StatefulWidget {
+class EditProfileScreen extends StatelessWidget {
   const EditProfileScreen({super.key});
-  @override
-  State<EditProfileScreen> createState() => _EditProfileScreenState();
-}
-
-class _EditProfileScreenState extends State<EditProfileScreen> {
-  final _uid = FirebaseAuth.instance.currentUser!.uid;
-  final _nameCtrl = TextEditingController();
-  final _bioCtrl = TextEditingController();
-  
-  List<String?> _photoUrls = List.filled(6, null);
-  List<File?> _newFiles = List.filled(6, null);
-  
-  bool _isLoading = true;
-  bool _isSaving = false;
-  bool _shareToFeed = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    try {
-      final user = await FirestoreService.getUser(_uid);
-      if (user != null) {
-        _nameCtrl.text = user.name;
-        _bioCtrl.text = user.bio;
-        List<String> userPhotos = List.from(user.photos);
-        for (int i = 0; i < 6; i++) {
-          if (i < userPhotos.length) _photoUrls[i] = userPhotos[i];
-        }
-      }
-    } catch (_) {}
-    setState(() => _isLoading = false);
-  }
-
-  // ✅ Sửa lại hàm để có thể chọn Máy ảnh
-  Future<void> _pickPhoto(int index) async {
-    final picker = ImagePicker();
-    
-    // Hiện lựa chọn nguồn ảnh
-    final ImageSource? source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 15),
-              child: Text("Chọn nguồn ảnh", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: AppColors.primary),
-              title: const Text("Chụp ảnh ngay"),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library, color: Colors.blue),
-              title: const Text("Chọn từ thư viện"),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-            const SizedBox(height: 10),
-          ],
-        ),
-      ),
-    );
-
-    if (source != null) {
-      final picked = await picker.pickImage(source: source, imageQuality: 70);
-      if (picked != null) {
-        setState(() => _newFiles[index] = File(picked.path));
-      }
-    }
-  }
-
-  void _removePhoto(int index) {
-    setState(() {
-      _photoUrls[index] = null;
-      _newFiles[index] = null;
-    });
-  }
-
-  Future<void> _save() async {
-    if (_nameCtrl.text.trim().isEmpty) {
-      Get.snackbar("Lỗi", "Vui lòng nhập tên", backgroundColor: Colors.red, colorText: Colors.white);
-      return;
-    }
-
-    setState(() => _isSaving = true);
-    try {
-      List<String> finalUrls = [];
-      for (int i = 0; i < 6; i++) {
-        if (_newFiles[i] != null) {
-          String? url = await UploadService.uploadImage(_newFiles[i]!);
-          if (url != null) finalUrls.add(url);
-        } else if (_photoUrls[i] != null) {
-          finalUrls.add(_photoUrls[i]!);
-        }
-      }
-
-      final mainPhoto = finalUrls.isNotEmpty ? finalUrls.first : "";
-
-      await FirestoreService.updateProfile(_uid, {
-        'name': _nameCtrl.text.trim(),
-        'bio': _bioCtrl.text.trim(),
-        'photoUrl': mainPhoto,
-        'photos': finalUrls,
-      });
-
-      if (_shareToFeed && mainPhoto.isNotEmpty) {
-        await FirestoreService.createPost(
-          content: "Mình vừa cập nhật ảnh hồ sơ mới! ✨",
-          imageUrl: mainPhoto,
-        );
-      }
-
-      AppHelpers.showSuccess("Đã cập nhật hồ sơ!");
-      Navigator.pop(context);
-    } catch (e) {
-      AppHelpers.showError("Lỗi khi lưu dữ liệu");
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
+    final controller = Get.put(EditProfileController());
+    final isDark = ThemeController.to.isDark;
+    final bg = isDark ? AppColors.darkBg : Colors.white;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: bg,
       appBar: AppBar(
-        title: const Text('Chỉnh sửa hồ sơ', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white, elevation: 0, iconTheme: const IconThemeData(color: Colors.black),
+        title: const Text('Chỉnh sửa hồ sơ', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
-          _isSaving 
-            ? const Center(child: Padding(padding: EdgeInsets.all(16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
-            : TextButton(onPressed: _save, child: const Text('Xong', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 16))),
+          Obx(() => TextButton(
+            onPressed: controller.isSaving.value ? null : controller.saveProfile,
+            child: controller.isSaving.value 
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Lưu', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+          )),
         ],
       ),
-      body: _isLoading ? const Center(child: CircularProgressIndicator()) : SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("Ảnh hồ sơ (Tối đa 6 ảnh)", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 15),
-            _buildPhotoGrid(),
-            const SizedBox(height: 30),
-            _buildTextField("Tên hiển thị", _nameCtrl, "Nhập tên của bạn"),
-            const SizedBox(height: 20),
-            _buildTextField("Tiểu sử", _bioCtrl, "Kể gì đó thú vị về bạn...", maxLines: 4),
-            const SizedBox(height: 30),
-            _buildShareOption(),
-          ],
-        ),
-      ),
-    );
-  }
+      body: Obx(() {
+        if (controller.isLoading.value) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-  Widget _buildShareOption() {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(15)),
-      child: Row(
-        children: [
-          const Icon(Icons.rss_feed, color: Colors.blue),
-          const SizedBox(width: 12),
-          const Expanded(child: Column(
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Chia sẻ lên Threads", style: TextStyle(fontWeight: FontWeight.bold)),
-              Text("Thông báo cập nhật cho mọi người", style: TextStyle(fontSize: 12, color: Colors.grey)),
+              _buildPhotoGrid(controller, isDark),
+              const SizedBox(height: 32),
+              _buildSectionTitle('Thông tin cơ bản', isDark),
+              const SizedBox(height: 16),
+              _buildBasicInfo(controller, isDark),
+              const SizedBox(height: 32),
+              _buildSectionTitle('Sở thích', isDark),
+              const SizedBox(height: 16),
+              _buildHobbies(controller, isDark),
+              const SizedBox(height: 40),
             ],
-          )),
-          Switch(
-            value: _shareToFeed, 
-            onChanged: (v) => setState(() => _shareToFeed = v),
-            activeColor: AppColors.primary,
           ),
-        ],
+        );
+      }),
+    );
+  }
+
+  Widget _buildSectionTitle(String title, bool isDark) {
+    return Text(
+      title.toUpperCase(),
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+        color: isDark ? Colors.white38 : Colors.grey.shade600,
+        letterSpacing: 1.2,
       ),
     );
   }
 
-  Widget _buildPhotoGrid() {
+  Widget _buildPhotoGrid(EditProfileController controller, bool isDark) {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 0.8),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 0.8,
+      ),
       itemCount: 6,
       itemBuilder: (context, i) {
-        final hasLocal = _newFiles[i] != null;
-        final hasRemote = _photoUrls[i] != null;
-        return GestureDetector(
-          onTap: () => _pickPhoto(i),
-          child: Stack(children: [
-            Container(
+        return Obx(() {
+          final photoUrl = controller.photoUrls[i];
+          final newFile = controller.newFiles[i];
+          final hasPhoto = photoUrl != null || newFile != null;
+
+          return GestureDetector(
+            onTap: () => _showPickerOptions(context, controller, i),
+            child: Container(
               decoration: BoxDecoration(
-                color: Colors.grey[100], borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: Colors.grey[300]!),
-                image: hasLocal 
-                  ? DecorationImage(image: FileImage(_newFiles[i]!), fit: BoxFit.cover)
-                  : (hasRemote ? DecorationImage(image: NetworkImage(_photoUrls[i]!), fit: BoxFit.cover) : null),
+                color: isDark ? AppColors.darkCard : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
+                image: hasPhoto ? DecorationImage(
+                  image: newFile != null 
+                    ? FileImage(File(newFile.path)) as ImageProvider // ✅ Đã sửa: XFile -> File
+                    : NetworkImage(photoUrl!),
+                  fit: BoxFit.cover,
+                ) : null,
               ),
-              child: (!hasLocal && !hasRemote) ? const Center(child: Icon(Icons.add_a_photo, color: Colors.grey)) : null,
+              child: Stack(
+                children: [
+                  if (!hasPhoto)
+                    const Center(child: Icon(Icons.add_a_photo_outlined, color: AppColors.primary)),
+                  if (hasPhoto)
+                    Positioned(
+                      top: 6, right: 6,
+                      child: GestureDetector(
+                        onTap: () => controller.removePhoto(i),
+                        child: const CircleAvatar(
+                          radius: 12,
+                          backgroundColor: Colors.black54,
+                          child: Icon(Icons.close, size: 14, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-            if (hasLocal || hasRemote)
-              Positioned(top: 5, right: 5, child: GestureDetector(
-                onTap: () => _removePhoto(i), 
-                child: const CircleAvatar(radius: 12, backgroundColor: Colors.black54, child: Icon(Icons.close, size: 14, color: Colors.white)))),
-          ]),
-        );
+          );
+        });
       },
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController ctrl, String hint, {int maxLines = 1}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey)),
-        TextField(
-          controller: ctrl, maxLines: maxLines,
-          decoration: InputDecoration(hintText: hint, border: const UnderlineInputBorder()),
+  void _showPickerOptions(BuildContext context, EditProfileController controller, int index) {
+    Get.bottomSheet(
+      Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Thêm ảnh hồ sơ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Chụp ảnh ngay'),
+              onTap: () { Get.back(); controller.pickPhoto(index, ImageSource.camera); },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Chọn từ thư viện'),
+              onTap: () { Get.back(); controller.pickPhoto(index, ImageSource.gallery); },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBasicInfo(EditProfileController controller, bool isDark) {
+    return Column(
+      children: [
+        _buildTextField(controller.nameCtrl, 'Họ tên', Icons.person_outline, isDark),
+        const SizedBox(height: 12),
+        _buildTextField(controller.ageCtrl, 'Tuổi', Icons.cake_outlined, isDark, keyboardType: TextInputType.number),
+        const SizedBox(height: 12),
+        _buildTextField(controller.jobCtrl, 'Nghề nghiệp', Icons.work_outline, isDark),
+        const SizedBox(height: 12),
+        _buildTextField(controller.bioCtrl, 'Giới thiệu bản thân', Icons.info_outline, isDark, maxLines: 3),
+        const SizedBox(height: 12),
+        _buildTextField(controller.locationCtrl, 'Thành phố', Icons.location_on_outlined, isDark),
       ],
+    );
+  }
+
+  Widget _buildTextField(TextEditingController ctrl, String label, IconData icon, bool isDark, {int maxLines = 1, TextInputType? keyboardType}) {
+    return TextField(
+      controller: ctrl,
+      maxLines: maxLines,
+      keyboardType: keyboardType,
+      style: TextStyle(color: isDark ? Colors.white : Colors.black),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: Colors.grey, size: 20),
+        filled: true,
+        fillColor: isDark ? AppColors.darkCard : Colors.grey.shade50,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      ),
+    );
+  }
+
+  Widget _buildHobbies(EditProfileController controller, bool isDark) {
+    final List<Map<String, dynamic>> hobbies = [
+      {'icon': Icons.music_note, 'label': 'Âm nhạc'},
+      {'icon': Icons.movie_outlined, 'label': 'Phim ảnh'},
+      {'icon': Icons.fitness_center, 'label': 'Gym'},
+      {'icon': Icons.flight_takeoff, 'label': 'Du lịch'},
+      {'icon': Icons.book_outlined, 'label': 'Đọc sách'},
+      {'icon': Icons.restaurant_menu, 'label': 'Nấu ăn'},
+      {'icon': Icons.videogame_asset_outlined, 'label': 'Gaming'},
+      {'icon': Icons.pets_outlined, 'label': 'Thú cưng'},
+      {'icon': Icons.palette_outlined, 'label': 'Nghệ thuật'},
+    ];
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: hobbies.map((h) {
+        return Obx(() {
+          final selected = controller.selectedHobbies.contains(h['label']);
+          return GestureDetector(
+            onTap: () => controller.toggleHobby(h['label']),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: selected ? AppColors.primary : (isDark ? Colors.white10 : Colors.grey.shade100),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: selected ? AppColors.primary : (isDark ? Colors.white10 : Colors.grey.shade200)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(h['icon'], size: 16, color: selected ? Colors.white : Colors.grey),
+                  const SizedBox(width: 8),
+                  Text(h['label'], style: TextStyle(color: selected ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+            ),
+          );
+        });
+      }).toList(),
     );
   }
 }

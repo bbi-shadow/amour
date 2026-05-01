@@ -3,7 +3,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function
+    // Helper functions
     function isSignedIn() {
       return request.auth != null;
     }
@@ -15,85 +15,62 @@ service cloud.firestore {
     // ── USERS ─────────────────────────────────
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isOwner(userId);
-      allow delete: if false; // Admin manually deletes
+      // Cho phép tạo/cập nhật nếu UID khớp với người đang đăng nhập
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if false;
     }
 
     // ── MATCHES ───────────────────────────────
     match /matches/{matchId} {
-      allow read, write: if isSignedIn() && request.auth.uid in resource.data.users;
-      allow create: if isSignedIn();
+      // Cho phép đọc nếu là 1 trong 2 người trong match
+      allow read: if isSignedIn() && request.auth.uid in resource.data.users;
+      allow write: if isSignedIn();
     }
 
     // ── CONVERSATIONS ─────────────────────────
     match /conversations/{convId} {
-      allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
-      allow write: if isSignedIn() && request.auth.uid in resource.data.participants;
+      // Cho phép đọc/ghi nếu là thành viên cuộc hội thoại hoặc đang tạo mới
+      allow read, write: if isSignedIn() && (
+        resource == null || request.auth.uid in resource.data.participants
+      );
 
       match /messages/{msgId} {
         allow read, write: if isSignedIn();
       }
     }
 
-    // ── SWIPES & LIKES ────────────────────────
-    match /swipes/{userId}/actions/{targetId} {
-      allow read, write: if isOwner(userId);
-    }
+    // ── INTERATIONS ──────────────────────────
+    match /swipes/{userId}/actions/{targetId} { allow read, write: if isOwner(userId); }
+    match /likes/{userId}/liked/{targetId} { allow read, write: if isOwner(userId); }
+    match /blocks/{userId}/blocked/{targetId} { allow read, write: if isOwner(userId); }
 
-    match /likes/{userId}/liked/{targetId} {
-      allow read, write: if isOwner(userId);
-    }
-
-    // ── BLOCKS ────────────────────────────────
-    match /blocks/{userId}/blocked/{targetId} {
-      allow read, write: if isOwner(userId);
-    }
-
-    // ── REPORTS ───────────────────────────────
     match /reports/{reportId} {
       allow create: if isSignedIn();
-      allow read, write: if false; // Only via Admin/Console
+      allow read: if false;
     }
 
-    // ── NOTIFICATIONS ─────────────────────────
     match /notifications/{notifId} {
       allow read, update: if isSignedIn() && request.auth.uid == resource.data.userId;
       allow create: if isSignedIn();
     }
 
-    // ── CALLS ─────────────────────────────────
     match /calls/{callId} {
       allow read, write: if isSignedIn();
     }
 
-    // ── ADMINS ────────────────────────────────
-    match /admins/{adminId} {
-      allow read: if isOwner(adminId);
-      allow write: if false;
-    }
-
-    // ── POSTS ─────────────────────────────────
     match /posts/{postId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && request.auth.uid == resource.data.authorId;
+      allow update, delete: if isSignedIn() && (
+        resource == null || request.auth.uid == resource.data.authorId
+      );
     }
 
-    // ── CITIES ────────────────────────────────
     match /cities/{cityId} {
       allow read: if isSignedIn();
-      allow write: if false;
     }
 
-    // ── FOLLOW ────────────────────────────────
-    match /following/{userId}/list/{targetId} {
-      allow read, write: if isOwner(userId);
-    }
-
-    match /followers/{userId}/list/{targetId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn();
-    }
+    match /following/{userId}/list/{targetId} { allow read, write: if isOwner(userId); }
+    match /followers/{userId}/list/{targetId} { allow read, write: if isSignedIn(); }
   }
 }

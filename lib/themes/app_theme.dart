@@ -2,102 +2,92 @@ import 'package:flutter/material.dart';
 
 /// ══════════════════════════════════════════════════════════════
 /// AppTheme — Amour Dating App
-/// Pink/Purple Romantic Gradient Theme
+/// Modern Passion Theme (Rose Red & Deep Violet)
 /// ══════════════════════════════════════════════════════════════
 
 class AppColors {
-  static const primary      = Color(0xFFFF4B6E);
-  static const primaryLight = Color(0xFFFF8E9B);
-  static const secondary    = Color(0xFF9B59B6);
-  static const accent       = Color(0xFFFF6B35);
-  static const gold         = Color(0xFFFFD700);
+  // Brand Colors
+  static const primary      = Color(0xFFE94057); // Rose Red
+  static const secondary    = Color(0xFF8A2387); // Deep Purple
+  static const accent       = Color(0xFFF27121); // Orange accent
+  static const gold         = Color(0xFFD4AF37); // Metallic Gold
+  static const primaryLight = Color(0xFFFFEBF0);
 
-  static const gradientPink     = [Color(0xFFFF4B6E), Color(0xFFFF8E9B)];
-  static const gradientPurple   = [Color(0xFF9B59B6), Color(0xFF6C3483)];
-  static const gradientRomantic = [Color(0xFFFF4B6E), Color(0xFF9B59B6)];
-  static const gradientSunset   = [Color(0xFFFF6B35), Color(0xFFFF4B6E)];
-  static const gradientGold     = [Color(0xFFFFD700), Color(0xFFFFA500)];
-  static const gradientDark     = [Color(0xFF1A1A1A), Color(0xFF000000)];
+  // Gradients
+  static const gradientPrimary  = [Color(0xFFE94057), Color(0xFFF27121)];
+  static const gradientPremium  = [Color(0xFF8A2387), Color(0xFFE94057)];
+  static const gradientLove     = [Color(0xFFFF0080), Color(0xFFFF8C00)];
 
-  static const lightBg      = Color(0xFFFFF8F9);
-  static const lightCard    = Color(0xFFFFFFFF);
-  static const lightText    = Color(0xFF1A1A1A);
-  static const lightSubtext = Color(0xFF666666);
-  static const lightBorder  = Color(0xFFEEEEEE);
-  static const lightDivider = Color(0xFFF0F0F0);
+  // Backgrounds
+  static const lightBg      = Color(0xFFFFFFFF);
+  static const lightCard    = Color(0xFFF8F8F8);
+  static const lightText    = Color(0xFF121212);
+  static const lightSubtext = Color(0xFF757575);
 
   static const darkBg       = Color(0xFF0F0F1A);
   static const darkCard     = Color(0xFF1A1A2E);
-  static const darkText     = Color(0xFFF0F0F0);
-  static const darkSubtext  = Color(0xFF999999);
+  static const darkText     = Color(0xFFFDFDFD);
+  static const darkSubtext  = Color(0xFFADADAD);
 
-  static const success = Color(0xFF4CAF50);
-  static const error   = Color(0xFFF44336);
-  static const warning = Color(0xFFFF9800);
-  static const info    = Color(0xFF2196F3);
-  static const online  = Color(0xFF4CAF50);
+  // Status
+  static const success = Color(0xFF2ECC71);
+  static const error   = Color(0xFFE74C3C);
+  static const info    = Color(0xFF3498DB);
+  static const online  = Color(0xFF2ECC71);
   static const offline = Color(0xFF9E9E9E);
 }
 
 class AppTheme {
-  static ThemeData get lightTheme => ThemeData(
+  static ThemeData get light => ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       primary: AppColors.primary,
       secondary: AppColors.secondary,
-      surface: AppColors.lightCard,
-      error: AppColors.error,
+      surface: AppColors.lightBg,
     ),
     scaffoldBackgroundColor: AppColors.lightBg,
     fontFamily: 'Nunito',
-
+    
     appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.white,
-      foregroundColor: AppColors.lightText,
+      backgroundColor: Colors.transparent,
       elevation: 0,
+      centerTitle: true,
       titleTextStyle: TextStyle(
         color: AppColors.lightText,
-        fontSize: 20,
-        fontWeight: FontWeight.w800,
-        fontFamily: 'Nunito',
+        fontSize: 22,
+        fontWeight: FontWeight.bold,
       ),
-    ),
-
-    cardTheme: CardThemeData(
-      color: AppColors.lightCard,
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      iconTheme: IconThemeData(color: AppColors.lightText),
     ),
 
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
-        elevation: 0,
+        minimumSize: const Size(double.infinity, 56),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, fontFamily: 'Nunito'),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        elevation: 2,
       ),
     ),
 
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: const Color(0xFFF5F5F5),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+      fillColor: AppColors.lightCard,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
       ),
+      contentPadding: const EdgeInsets.all(18),
     ),
 
-    chipTheme: ChipThemeData(
-      backgroundColor: const Color(0xFFF0F0F0),
-      selectedColor: AppColors.primary.withValues(alpha: 0.15),
-      labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    cardTheme: CardThemeData(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      elevation: 4,
+      shadowColor: Colors.black12,
     ),
   );
 
@@ -107,43 +97,69 @@ class AppTheme {
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       primary: AppColors.primary,
+      secondary: AppColors.secondary,
+      surface: AppColors.darkBg,
       brightness: Brightness.dark,
     ),
     scaffoldBackgroundColor: AppColors.darkBg,
     fontFamily: 'Nunito',
+
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      centerTitle: true,
+      titleTextStyle: TextStyle(
+        color: AppColors.darkText,
+        fontSize: 22,
+        fontWeight: FontWeight.bold,
+      ),
+      iconTheme: IconThemeData(color: AppColors.darkText),
+    ),
+
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(double.infinity, 56),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+      ),
+    ),
+
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: AppColors.darkCard,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
+      ),
+      contentPadding: const EdgeInsets.all(18),
+    ),
+    
     cardTheme: CardThemeData(
       color: AppColors.darkCard,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     ),
   );
-
-  static ThemeData get light => lightTheme;
 }
 
 class AppGradients {
-  static const romantic = LinearGradient(
-    colors: AppColors.gradientRomantic,
+  static const main = LinearGradient(
+    colors: AppColors.gradientPrimary,
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
-  static const pink = LinearGradient(
-    colors: AppColors.gradientPink,
+  
+  static const premium = LinearGradient(
+    colors: AppColors.gradientPremium,
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
-  // ✅ Thêm hàm glass để sửa lỗi
-  static BoxDecoration glass({double opacity = 0.15, double radius = 20}) => BoxDecoration(
+  static BoxDecoration glass({double opacity = 0.1, double radius = 20}) => BoxDecoration(
     color: Colors.white.withValues(alpha: opacity),
     borderRadius: BorderRadius.circular(radius),
-    border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
-    boxShadow: [
-      BoxShadow(
-        color: Colors.black.withValues(alpha: 0.1),
-        blurRadius: 20,
-        offset: const Offset(0, 4),
-      ),
-    ],
+    border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
   );
 }

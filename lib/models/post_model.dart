@@ -28,7 +28,7 @@ class PostModel {
   });
 
   factory PostModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    final data = doc.data() as Map<String, dynamic>? ?? {};
     return PostModel(
       id: doc.id,
       authorId: data['authorId'] ?? '',
@@ -42,21 +42,6 @@ class PostModel {
       commentCount: data['commentCount'] ?? 0,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'authorId': authorId,
-      'authorName': authorName,
-      'authorPhoto': authorPhoto,
-      'content': content,
-      'imageUrl': imageUrl,
-      'likes': likes,
-      'reposts': reposts,
-      'bookmarks': bookmarks,
-      'commentCount': commentCount,
-      'createdAt': FieldValue.serverTimestamp(),
-    };
   }
 }
 
@@ -80,7 +65,7 @@ class CommentModel {
   });
 
   factory CommentModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    final data = doc.data() as Map<String, dynamic>? ?? {};
     return CommentModel(
       id: doc.id,
       authorId: data['authorId'] ?? '',

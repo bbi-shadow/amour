@@ -1,288 +1,183 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:get/get.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../controllers/safety_controller.dart';
+import '../controllers/theme_controller.dart';
+import '../themes/app_theme.dart';
+import '../utils/app_constants.dart';
 
 class SafetyScreen extends StatelessWidget {
   const SafetyScreen({super.key});
 
-  Future<void> _blockUser(BuildContext context, String targetUid) async {
-    final myUid = FirebaseAuth.instance.currentUser!.uid;
-    await FirebaseFirestore.instance
-        .collection('blocks')
-        .doc(myUid)
-        .collection('blocked')
-        .doc(targetUid)
-        .set({'timestamp': FieldValue.serverTimestamp()});
-    if (context.mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('Đã chặn người dùng'),
-        backgroundColor: Colors.red[400],
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final controller = Get.put(SafetyController());
+    final isDark = ThemeController.to.isDark;
+    final bg = isDark ? AppColors.darkBg : const Color(0xFFF8F9FE);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F0F2),
+      backgroundColor: bg,
       appBar: AppBar(
-        title: const Text('An toàn & Quyền riêng tư',
-            style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A))),
-        backgroundColor: Colors.white,
+        title: const Text('An toan va Rieng tu', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: isDark ? AppColors.darkCard : Colors.white,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF1A1A1A)),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSection([
+          _buildSection(isDark, [
             _buildItem(
-              icon: Icons.block_rounded,
-              iconBg: Colors.red.shade400,
-              title: 'Danh sách đã chặn',
-              subtitle: 'Quản lý người dùng bị chặn',
-              onTap: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const _BlockedListScreen())),
+              context,
+              icon: Icons.block_outlined,
+              color: Colors.red,
+              title: 'Danh sach da chan',
+              subtitle: 'Quan ly nguoi dung bi chan',
+              onTap: () => Get.to(() => const BlockedListScreen()),
             ),
             _buildItem(
-              icon: Icons.flag_rounded,
-              iconBg: const Color(0xFFF5A623),
-              title: 'Báo cáo người dùng',
-              subtitle: 'Báo cáo hành vi không phù hợp',
+              context,
+              icon: Icons.flag_outlined,
+              color: Colors.orange,
+              title: 'Bao cao nguoi dung',
+              subtitle: 'Bao cao hanh vi khong phu hop',
               isLast: true,
-              onTap: () => _showReportDialog(context),
+              onTap: () => _showReportSheet(context, controller),
             ),
           ]),
           const SizedBox(height: 16),
-          _buildSection([
+          _buildSection(isDark, [
             _buildItem(
-              icon: Icons.verified_user_rounded,
-              iconBg: const Color(0xFF22B07D),
-              title: 'Xác minh tài khoản',
-              subtitle: 'Xác minh để tăng độ tin cậy',
+              context,
+              icon: Icons.verified_user_outlined,
+              color: Colors.green,
+              title: 'Xac minh tai khoan',
+              subtitle: 'Tang do tin cay cho ho so',
               onTap: () {},
             ),
             _buildItem(
-              icon: Icons.lock_rounded,
-              iconBg: const Color(0xFF5B86E5),
-              title: 'Đổi mật khẩu',
-              subtitle: 'Cập nhật mật khẩu tài khoản',
+              context,
+              icon: Icons.lock_outline,
+              color: Colors.blue,
+              title: 'Mat khau',
+              subtitle: 'Cap nhat bao mat tai khoan',
               isLast: true,
-              onTap: () => _showChangePasswordDialog(context),
+              onTap: () {},
             ),
           ]),
-          const SizedBox(height: 16),
-          // Danger zone
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.red.withOpacity(0.2)),
-            ),
-            child: _buildItem(
-              icon: Icons.delete_forever_rounded,
-              iconBg: Colors.red,
-              title: 'Xoá tài khoản',
-              subtitle: 'Xoá vĩnh viễn tất cả dữ liệu',
-              titleColor: Colors.red,
-              isLast: true,
-              onTap: () => _showDeleteAccountDialog(context),
-            ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildSection(List<Widget> children) {
+  Widget _buildSection(bool isDark, List<Widget> children) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 3))],
+        color: isDark ? AppColors.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
       ),
       child: Column(children: children),
     );
   }
 
-  Widget _buildItem({
+  Widget _buildItem(BuildContext context, {
     required IconData icon,
-    required Color iconBg,
+    required Color color,
     required String title,
     required String subtitle,
     required VoidCallback onTap,
-    Color? titleColor,
     bool isLast = false,
   }) {
-    return GestureDetector(
+    return ListTile(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      leading: Container(
+        width: 40, height: 40,
+        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+        child: Icon(icon, color: color, size: 20),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+      subtitle: Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+      shape: isLast ? null : Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.05))),
+    );
+  }
+
+  void _showReportSheet(BuildContext context, SafetyController controller) {
+    final reasons = ['Noi dung khong phu hop', 'Spam', 'Gia mao', 'Quay roi', 'Khac'];
+    Get.bottomSheet(
+      Container(
+        padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          border: isLast ? null : Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.1))),
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        child: Row(children: [
-          Container(
-            width: 40, height: 40,
-            decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(12)),
-            child: Icon(icon, color: Colors.white, size: 18),
-          ),
-          const SizedBox(width: 14),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600,
-                color: titleColor ?? const Color(0xFF1A1A1A))),
-            Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey[500])),
-          ])),
-          Icon(Icons.chevron_right_rounded, color: Colors.grey[400], size: 20),
-        ]),
-      ),
-    );
-  }
-
-  void _showReportDialog(BuildContext context) {
-    final reasons = ['Nội dung không phù hợp', 'Spam', 'Giả mạo danh tính', 'Quấy rối', 'Khác'];
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Lý do báo cáo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          ...reasons.map((r) => ListTile(
-            title: Text(r),
-            trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
-            onTap: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: const Text('Đã gửi báo cáo. Cảm ơn bạn!'),
-                backgroundColor: const Color(0xFF22B07D),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ));
-            },
-          )),
-        ]),
-      ),
-    );
-  }
-
-  void _showChangePasswordDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Đổi mật khẩu'),
-        content: const Text('Link đặt lại mật khẩu sẽ được gửi đến email của bạn.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Huỷ')),
-          TextButton(
-            onPressed: () async {
-              final user = FirebaseAuth.instance.currentUser;
-              if (user?.email != null) {
-                await FirebaseAuth.instance.sendPasswordResetEmail(email: user!.email!);
-              }
-              if (context.mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: const Text('Đã gửi email đặt lại mật khẩu'),
-                  backgroundColor: const Color(0xFF5B86E5),
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ));
-              }
-            },
-            child: const Text('Gửi', style: TextStyle(color: Color(0xFFFF6B8A))),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteAccountDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Xoá tài khoản', style: TextStyle(color: Colors.red)),
-        content: const Text('Tất cả dữ liệu của bạn sẽ bị xoá vĩnh viễn. Hành động này không thể hoàn tác.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Huỷ')),
-          TextButton(
-            onPressed: () async {
-              await FirebaseAuth.instance.currentUser?.delete();
-              if (context.mounted) Navigator.pop(context);
-            },
-            child: const Text('Xoá', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          ),
-        ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Ly do bao cao', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            ...reasons.map((r) => ListTile(
+              title: Text(r),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () {
+                Get.back();
+                controller.sendReport(r);
+              },
+            )),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _BlockedListScreen extends StatelessWidget {
-  const _BlockedListScreen();
+class BlockedListScreen extends StatelessWidget {
+  const BlockedListScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final myUid = FirebaseAuth.instance.currentUser!.uid;
+    final controller = SafetyController.to;
+    final isDark = ThemeController.to.isDark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F0F2),
-      appBar: AppBar(
-        title: const Text('Đã chặn', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A))),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF1A1A1A)),
-      ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('blocks').doc(myUid).collection('blocked').snapshots(),
-        builder: (context, snap) {
-          final docs = snap.data?.docs ?? [];
-          if (docs.isEmpty) {
-            return const Center(child: Text('Chưa chặn ai', style: TextStyle(color: Colors.grey)));
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: docs.length,
-            itemBuilder: (context, i) {
-              final uid = docs[i].id;
-              return FutureBuilder<DocumentSnapshot>(
-                future: FirebaseFirestore.instance.collection('users').doc(uid).get(),
-                builder: (context, userSnap) {
-                  if (!userSnap.hasData) return const SizedBox(height: 60);
-                  final data = userSnap.data!.data() as Map<String, dynamic>?;
-                  final name = data?['name'] ?? 'Người dùng';
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
+      backgroundColor: isDark ? AppColors.darkBg : const Color(0xFFF8F9FE),
+      appBar: AppBar(title: const Text('Nguoi dung da chan')),
+      body: Obx(() {
+        if (controller.isLoading.value) return const Center(child: CircularProgressIndicator());
+        if (controller.blockedUids.isEmpty) return const Center(child: Text('Chua chan ai', style: TextStyle(color: Colors.grey)));
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: controller.blockedUids.length,
+          itemBuilder: (ctx, i) {
+            final uid = controller.blockedUids[i];
+            return FutureBuilder<DocumentSnapshot>(
+              future: FirebaseFirestore.instance.collection('users').doc(uid).get(),
+              builder: (ctx2, snap) {
+                if (!snap.hasData) return const SizedBox.shrink();
+                final data = snap.data!.data() as Map<String, dynamic>?;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.darkCard : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: ListTile(
+                    leading: CircleAvatar(backgroundImage: data?['photoUrl']?.isNotEmpty == true ? NetworkImage(data!['photoUrl']) : null),
+                    title: Text(data?['name'] ?? 'User'),
+                    trailing: TextButton(
+                      onPressed: () => controller.unblockUser(uid),
+                      child: const Text('Bo chan'),
                     ),
-                    child: Row(children: [
-                      const Icon(Icons.block_rounded, color: Colors.red, size: 20),
-                      const SizedBox(width: 12),
-                      Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600))),
-                      TextButton(
-                        onPressed: () async {
-                          await FirebaseFirestore.instance
-                              .collection('blocks').doc(myUid).collection('blocked').doc(uid).delete();
-                        },
-                        child: const Text('Bỏ chặn', style: TextStyle(color: Color(0xFF5B86E5))),
-                      ),
-                    ]),
-                  );
-                },
-              );
-            },
-          );
-        },
-      ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      }),
     );
   }
 }

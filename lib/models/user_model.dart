@@ -2,43 +2,42 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// ══════════════════════════════════════════════════════════════
 /// UserModel — Model người dùng đầy đủ cho Amour Dating App
-/// Hỗ trợ: 6 ảnh, sở thích, vị trí, premium, verify badge, v.v.
 /// ══════════════════════════════════════════════════════════════
 class UserModel {
   final String uid;
   final String name;
   final String email;
   final int age;
-  final String gender;             // 'Nam' | 'Nữ' | 'Khác'
-  final String lookingFor;         // Giới tính mong muốn tìm kiếm
+  final String gender;
+  final String lookingFor;
   final String bio;
-  final String photoUrl;           // Ảnh đại diện chính
-  final List<String> photos;       // Tối đa 6 ảnh hồ sơ
+  final String photoUrl;
+  final List<String> photos;
   final String city;
   final double? latitude;
   final double? longitude;
-  final int searchRadius;          // km
-  final List<String> interests;    // Sở thích
-  final String occupation;         // Nghề nghiệp
-  final String school;             // Trường học
-  final int height;                // cm
-  final String zodiac;             // Cung hoàng đạo
-  final String relationshipGoal;   // Mục tiêu hẹn hò
-  final String maritalStatus;      // Tình trạng hôn nhân
-  final bool isVerified;           // Verify badge
-  final bool isPremium;            // Gói premium
-  final String premiumPlan;        // 'free' | 'basic' | 'gold' | 'platinum'
+  final int searchRadius;
+  final List<String> interests;
+  final String job;                 // ✅ Đã đổi từ occupation thành job
+  final String school;
+  final int height;
+  final String zodiac;
+  final String relationshipGoal;
+  final String maritalStatus;
+  final bool isVerified;
+  final bool isPremium;
+  final String premiumPlan;
   final DateTime? premiumExpiry;
   final bool isOnline;
   final DateTime? lastSeen;
   final bool isBanned;
   final String banReason;
   final DateTime? createdAt;
-  final int likeCount;             // Số lượt thích nhận được
-  final int superLikeCount;        // Số Super Like còn lại
-  final int boostCount;            // Số Boost còn lại
-  final int dailySwipeCount;       // Số swipe hôm nay
-  final DateTime? dailySwipeReset; // Thời điểm reset swipe
+  final int likeCount;
+  final int superLikeCount;
+  final int boostCount;
+  final int dailySwipeCount;
+  final DateTime? dailySwipeReset;
 
   UserModel({
     required this.uid,
@@ -55,7 +54,7 @@ class UserModel {
     this.longitude,
     this.searchRadius = 50,
     this.interests = const [],
-    this.occupation = '',
+    this.job = '',
     this.school = '',
     this.height = 0,
     this.zodiac = '',
@@ -77,19 +76,17 @@ class UserModel {
     this.dailySwipeReset,
   });
 
-  /// Kiểm tra còn swipe không (free: 20/ngày, premium: unlimited)
   bool get canSwipe {
     if (isPremium) return true;
     if (dailySwipeReset == null) return true;
     final now = DateTime.now();
-    final reset = dailySwipeReset!;
-    if (now.difference(reset).inHours >= 24) return true; // reset rồi
+    if (now.difference(dailySwipeReset!).inHours >= 24) return true;
     return dailySwipeCount < 20;
   }
 
   String get location => city;
+  List<String> get hobbies => interests; // ✅ Alias cho interests
 
-  // ── Parse helpers ──────────────────────────────────────────
   static int _parseInt(dynamic raw) {
     if (raw == null) return 0;
     if (raw is int) return raw;
@@ -119,17 +116,9 @@ class UserModel {
     return null;
   }
 
-  // ── Factory constructors ───────────────────────────────────
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
-    final data = (doc.data() as Map<String, dynamic>?) ?? {};
-    return UserModel._fromMap(data, doc.id);
-  }
-
-  factory UserModel.fromMap(Map<String, dynamic> data, String uid) {
-    return UserModel._fromMap(data, uid);
-  }
-
-  factory UserModel._fromMap(Map<String, dynamic> d, String uid) {
+    final d = (doc.data() as Map<String, dynamic>?) ?? {};
+    final uid = doc.id;
     return UserModel(
       uid: uid,
       name: d['name']?.toString() ?? '',
@@ -144,8 +133,8 @@ class UserModel {
       latitude: _parseDouble(d['latitude']),
       longitude: _parseDouble(d['longitude']),
       searchRadius: _parseInt(d['searchRadius'] ?? 50),
-      interests: _parseList(d['interests']),
-      occupation: d['occupation']?.toString() ?? '',
+      interests: _parseList(d['interests'] ?? d['hobbies']),
+      job: (d['job'] ?? d['occupation'])?.toString() ?? '',
       school: d['school']?.toString() ?? '',
       height: _parseInt(d['height']),
       zodiac: d['zodiac']?.toString() ?? '',
@@ -170,100 +159,20 @@ class UserModel {
 
   Map<String, dynamic> toMap() {
     return {
-      'uid': uid,
-      'name': name,
-      'email': email,
-      'age': age,
-      'gender': gender,
-      'lookingFor': lookingFor,
-      'bio': bio,
-      'photoUrl': photoUrl,
-      'photos': photos,
-      'city': city,
-      'latitude': latitude,
-      'longitude': longitude,
-      'searchRadius': searchRadius,
-      'interests': interests,
-      'occupation': occupation,
-      'school': school,
-      'height': height,
-      'zodiac': zodiac,
-      'relationshipGoal': relationshipGoal,
-      'maritalStatus': maritalStatus,
-      'isVerified': isVerified,
-      'isPremium': isPremium,
-      'premiumPlan': premiumPlan,
+      'uid': uid, 'name': name, 'email': email, 'age': age, 'gender': gender,
+      'lookingFor': lookingFor, 'bio': bio, 'photoUrl': photoUrl, 'photos': photos,
+      'city': city, 'latitude': latitude, 'longitude': longitude,
+      'searchRadius': searchRadius, 'interests': interests, 'job': job,
+      'school': school, 'height': height, 'zodiac': zodiac,
+      'relationshipGoal': relationshipGoal, 'maritalStatus': maritalStatus,
+      'isVerified': isVerified, 'isPremium': isPremium, 'premiumPlan': premiumPlan,
       'premiumExpiry': premiumExpiry != null ? Timestamp.fromDate(premiumExpiry!) : null,
-      'isOnline': isOnline,
-      'lastSeen': lastSeen != null ? Timestamp.fromDate(lastSeen!) : null,
-      'isBanned': isBanned,
-      'banReason': banReason,
+      'isOnline': isOnline, 'lastSeen': lastSeen != null ? Timestamp.fromDate(lastSeen!) : null,
+      'isBanned': isBanned, 'banReason': banReason,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
-      'likeCount': likeCount,
-      'superLikeCount': superLikeCount,
-      'boostCount': boostCount,
+      'likeCount': likeCount, 'superLikeCount': superLikeCount, 'boostCount': boostCount,
       'dailySwipeCount': dailySwipeCount,
       'dailySwipeReset': dailySwipeReset != null ? Timestamp.fromDate(dailySwipeReset!) : null,
     };
-  }
-
-  UserModel copyWith({
-    String? name,
-    String? email,
-    int? age,
-    String? gender,
-    String? lookingFor,
-    String? bio,
-    String? photoUrl,
-    List<String>? photos,
-    String? city,
-    double? latitude,
-    double? longitude,
-    int? searchRadius,
-    List<String>? interests,
-    String? occupation,
-    String? school,
-    int? height,
-    String? zodiac,
-    String? relationshipGoal,
-    String? maritalStatus,
-    bool? isVerified,
-    bool? isPremium,
-    String? premiumPlan,
-    DateTime? premiumExpiry,
-    bool? isOnline,
-    DateTime? lastSeen,
-  }) {
-    return UserModel(
-      uid: uid,
-      name: name ?? this.name,
-      email: email ?? this.email,
-      age: age ?? this.age,
-      gender: gender ?? this.gender,
-      lookingFor: lookingFor ?? this.lookingFor,
-      bio: bio ?? this.bio,
-      photoUrl: photoUrl ?? this.photoUrl,
-      photos: photos ?? this.photos,
-      city: city ?? this.city,
-      latitude: latitude ?? this.latitude,
-      longitude: longitude ?? this.longitude,
-      searchRadius: searchRadius ?? this.searchRadius,
-      interests: interests ?? this.interests,
-      occupation: occupation ?? this.occupation,
-      school: school ?? this.school,
-      height: height ?? this.height,
-      zodiac: zodiac ?? this.zodiac,
-      relationshipGoal: relationshipGoal ?? this.relationshipGoal,
-      maritalStatus: maritalStatus ?? this.maritalStatus,
-      isVerified: isVerified ?? this.isVerified,
-      isPremium: isPremium ?? this.isPremium,
-      premiumPlan: premiumPlan ?? this.premiumPlan,
-      premiumExpiry: premiumExpiry ?? this.premiumExpiry,
-      isOnline: isOnline ?? this.isOnline,
-      lastSeen: lastSeen ?? this.lastSeen,
-      isBanned: isBanned,
-      banReason: banReason,
-      createdAt: createdAt,
-    );
   }
 }
