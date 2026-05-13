@@ -7,6 +7,11 @@ class AppConstants {
   static const appName    = 'Amour';
   static const appVersion = '1.0.0';
 
+  // Agora credentials
+  static const agoraAppId          = '60b853ab652045a6af74da86d5e9e304';
+  // ⚠️ Chỉ dùng cho dev/test — chuyển sang Token Server khi production
+  static const agoraAppCertificate = '4edf7962443d4a0384dae6f56d4a6d6b';
+
   // Firestore Collections
   static const colUsers         = 'users';
   static const colAdmins        = 'admins';
@@ -22,20 +27,20 @@ class AppConstants {
 
   // Discovery Options - Icons standard
   static const List<Map<String, dynamic>> interestOptions = [
-    {'icon': Icons.music_note, 'label': 'Âm nhạc'}, 
-    {'icon': Icons.movie_outlined, 'label': 'Phim ảnh'}, 
+    {'icon': Icons.music_note, 'label': 'Âm nhạc'},
+    {'icon': Icons.movie_outlined, 'label': 'Phim ảnh'},
     {'icon': Icons.fitness_center, 'label': 'Gym'},
-    {'icon': Icons.flight_takeoff, 'label': 'Du lịch'}, 
-    {'icon': Icons.menu_book_outlined, 'label': 'Đọc sách'}, 
+    {'icon': Icons.flight_takeoff, 'label': 'Du lịch'},
+    {'icon': Icons.menu_book_outlined, 'label': 'Đọc sách'},
     {'icon': Icons.restaurant_outlined, 'label': 'Nấu ăn'},
-    {'icon': Icons.videogame_asset_outlined, 'label': 'Gaming'}, 
-    {'icon': Icons.pets_outlined, 'label': 'Thú cưng'}, 
+    {'icon': Icons.videogame_asset_outlined, 'label': 'Gaming'},
+    {'icon': Icons.pets_outlined, 'label': 'Thú cưng'},
     {'icon': Icons.palette_outlined, 'label': 'Nghệ thuật'},
-    {'icon': Icons.coffee_outlined, 'label': 'Cà phê'}, 
-    {'icon': Icons.beach_access_outlined, 'label': 'Biển'}, 
+    {'icon': Icons.coffee_outlined, 'label': 'Cà phê'},
+    {'icon': Icons.beach_access_outlined, 'label': 'Biển'},
     {'icon': Icons.self_improvement, 'label': 'Yoga'},
-    {'icon': Icons.camera_alt_outlined, 'label': 'Nhiếp ảnh'}, 
-    {'icon': Icons.sports_soccer, 'label': 'Thể thao'}, 
+    {'icon': Icons.camera_alt_outlined, 'label': 'Nhiếp ảnh'},
+    {'icon': Icons.sports_soccer, 'label': 'Thể thao'},
     {'icon': Icons.directions_run, 'label': 'Chạy bộ'},
   ];
 }
@@ -55,7 +60,7 @@ class AppRoutes {
 }
 
 class AppHelpers {
-  static bool isValidEmail(String email) => 
+  static bool isValidEmail(String email) =>
       RegExp(r"^[a-zA-Z0-9.]+@[a-zA-Z0-9]+\.[a-zA-Z]+").hasMatch(email);
 
   static String? validatePassword(String pass) {

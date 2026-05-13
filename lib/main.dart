@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'firebase_options.dart';
 import 'core/app_bindings.dart';
 import 'controllers/auth_controller.dart';
@@ -19,8 +21,13 @@ import 'utils/app_constants.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Khoá màn hình dọc — tránh lỗi xoay tròn trên emulator/device
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
+  await initializeDateFormatting('vi', null); // ← fix LocaleDataException
   await FCMService.init();
 
   runApp(const AmourApp());
@@ -37,7 +44,7 @@ class AmourApp extends StatelessWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       initialBinding: AppBindings(),
-      themeMode: ThemeMode.system, 
+      themeMode: ThemeMode.system,
       initialRoute: AppRoutes.splash,
       getPages: [
         GetPage(name: AppRoutes.splash,       page: () => const AuthGate()),
@@ -60,7 +67,7 @@ class AmourApp extends StatelessWidget {
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
-  
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
@@ -69,15 +76,15 @@ class AuthGate extends StatelessWidget {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SplashScreen();
         }
-        
+
         if (snapshot.hasData && snapshot.data != null) {
           return Obx(() {
             final auth = AuthController.to;
             // Cho load profile tu Firestore
             if (auth.currentUser.value == null) return const SplashScreen();
-            
+
             return FutureBuilder<bool>(
-              future: auth.checkIsAdmin(snapshot.data!.uid),
+              future : auth.checkIsAdmin(snapshot.data!.uid),
               builder: (context, adminSnap) {
                 if (adminSnap.connectionState == ConnectionState.waiting) return const SplashScreen();
                 return (adminSnap.data == true) ? const AdminScreen() : const HomeScreen();

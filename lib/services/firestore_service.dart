@@ -151,6 +151,7 @@ class FirestoreService {
   // -- FEED SYSTEM --
   static Future<bool> createPost({required String content, String? imageUrl}) async {
     if (_uid.isEmpty) return false;
+    // FIX: Luôn fetch lại user mới nhất từ Firestore để lấy photoUrl cập nhật từ Cloudinary
     final user = await getUser(_uid);
     if (user == null) return false;
 
@@ -158,6 +159,7 @@ class FirestoreService {
       await _db.collection(AppConstants.colPosts).add({
         'authorId': _uid,
         'authorName': user.name,
+        // FIX: photoUrl đã được cập nhật từ Cloudinary (getUser luôn fetch mới nhất)
         'authorPhoto': user.photoUrl,
         'content': content,
         'imageUrl': imageUrl,
@@ -172,6 +174,73 @@ class FirestoreService {
       return false;
     }
   }
+
+  // -- FOLLOW SYSTEM --
+
+  /// Theo dõi một user
+  static Future<void> followUser(String targetUid) async {
+    if (_uid.isEmpty || targetUid == _uid) return;
+    final batch = _db.batch();
+    batch.update(_db.collection(AppConstants.colUsers).doc(_uid), {
+      'following': FieldValue.arrayUnion([targetUid]),
+    });
+    batch.update(_db.collection(AppConstants.colUsers).doc(targetUid), {
+      'followers': FieldValue.arrayUnion([_uid]),
+    });
+    await batch.commit();
+  }
+
+  /// Bỏ theo dõi một user
+  static Future<void> unfollowUser(String targetUid) async {
+    if (_uid.isEmpty) return;
+    final batch = _db.batch();
+    batch.update(_db.collection(AppConstants.colUsers).doc(_uid), {
+      'following': FieldValue.arrayRemove([targetUid]),
+    });
+    batch.update(_db.collection(AppConstants.colUsers).doc(targetUid), {
+      'followers': FieldValue.arrayRemove([_uid]),
+    });
+    await batch.commit();
+  }
+
+  /// Xóa một follower ra khỏi danh sách của mình
+  static Future<void> removeFollower(String followerUid) async {
+    if (_uid.isEmpty) return;
+    final batch = _db.batch();
+    // Xóa followerUid khỏi followers của mình
+    batch.update(_db.collection(AppConstants.colUsers).doc(_uid), {
+      'followers': FieldValue.arrayRemove([followerUid]),
+    });
+    // Xóa _uid khỏi following của người kia
+    batch.update(_db.collection(AppConstants.colUsers).doc(followerUid), {
+      'following': FieldValue.arrayRemove([_uid]),
+    });
+    await batch.commit();
+  }
+
+  /// Kiểm tra mình có đang follow targetUid không
+  static Future<bool> isFollowing(String targetUid) async {
+    if (_uid.isEmpty) return false;
+    final doc = await _db.collection(AppConstants.colUsers).doc(_uid).get();
+    if (!doc.exists) return false;
+    final List<dynamic> following = doc.data()?['following'] ?? [];
+    return following.contains(targetUid);
+  }
+
+  /// Lấy danh sách followers của một user
+  static Future<List<String>> getFollowers(String uid) async {
+    final doc = await _db.collection(AppConstants.colUsers).doc(uid).get();
+    if (!doc.exists) return [];
+    return List<String>.from(doc.data()?['followers'] ?? []);
+  }
+
+  /// Lấy danh sách following của một user
+  static Future<List<String>> getFollowing(String uid) async {
+    final doc = await _db.collection(AppConstants.colUsers).doc(uid).get();
+    if (!doc.exists) return [];
+    return List<String>.from(doc.data()?['following'] ?? []);
+  }
+
 
   static Stream<List<PostModel>> getFeedStream() {
     return _db.collection(AppConstants.colPosts)

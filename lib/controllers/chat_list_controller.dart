@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import '../models/user_model.dart';
 import '../controllers/auth_controller.dart';
@@ -8,7 +9,6 @@ import '../utils/app_constants.dart';
 class ChatListController extends GetxController {
   static ChatListController get to => Get.find();
 
-  // -- States --
   final RxList<QueryDocumentSnapshot> allConversations = <QueryDocumentSnapshot>[].obs;
   final RxList<QueryDocumentSnapshot> filteredConversations = <QueryDocumentSnapshot>[].obs;
   final RxMap<String, UserModel> userCache = <String, UserModel>{}.obs;
@@ -17,13 +17,22 @@ class ChatListController extends GetxController {
   final RxBool isSearching = false.obs;
 
   StreamSubscription? _convSub;
-  final String _uid = AuthController.to.currentUid ?? '';
+  // Track uid đang fetch để tránh duplicate request
+  final Set<String> _fetchingUids = {};
+
+  String get _uid => AuthController.to.currentUid ?? '';
 
   @override
   void onInit() {
     super.onInit();
     if (_uid.isNotEmpty) {
       subscribeConversations();
+    } else {
+      ever(AuthController.to.firebaseUser, (user) {
+        if (user != null && _convSub == null) {
+          subscribeConversations();
+        }
+      });
     }
   }
 
@@ -39,21 +48,33 @@ class ChatListController extends GetxController {
         .where('participants', arrayContains: _uid)
         .orderBy('lastMessageTime', descending: true)
         .snapshots()
-        .listen((snap) {
+        .listen((snap) async {
+      // Fetch tất cả user còn thiếu TRƯỚC khi cập nhật list
+      await _prefetchMissingUsers(snap.docs);
+
       allConversations.value = snap.docs;
-      _prefetchMissingUsers(snap.docs);
       applyFilters();
       isLoading.value = false;
     });
   }
 
-  void _prefetchMissingUsers(List<QueryDocumentSnapshot> docs) {
+  /// Await tất cả fetch song song, đảm bảo cache đầy đủ trước khi UI build
+  Future<void> _prefetchMissingUsers(List<QueryDocumentSnapshot> docs) async {
+    final futures = <Future>[];
+
     for (final doc in docs) {
       final data = doc.data() as Map<String, dynamic>;
       final otherUid = _getOtherUid(data);
-      if (otherUid.isNotEmpty && !userCache.containsKey(otherUid)) {
-        _fetchAndCacheUser(otherUid);
+      if (otherUid.isNotEmpty &&
+          !userCache.containsKey(otherUid) &&
+          !_fetchingUids.contains(otherUid)) {
+        _fetchingUids.add(otherUid);
+        futures.add(_fetchAndCacheUser(otherUid));
       }
+    }
+
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
     }
   }
 
@@ -64,10 +85,13 @@ class ChatListController extends GetxController {
           .doc(uid)
           .get();
       if (snap.exists) {
-        userCache[uid] = UserModel.fromFirestore(snap);
+        // ✅ Dùng addAll để trigger RxMap reactive update
+        userCache.addAll({uid: UserModel.fromFirestore(snap)});
       }
     } catch (e) {
-      print("Error caching user $uid: $e");
+      debugPrint("Error caching user $uid: $e");
+    } finally {
+      _fetchingUids.remove(uid);
     }
   }
 
@@ -104,7 +128,14 @@ class ChatListController extends GetxController {
     }
   }
 
-  UserModel? getCachedUser(String otherUid) => userCache[otherUid];
+  /// Gọi từ UI khi user chưa có trong cache (fallback)
+  void fetchUserIfNeeded(String uid) {
+    if (uid.isEmpty || userCache.containsKey(uid) || _fetchingUids.contains(uid)) return;
+    _fetchingUids.add(uid);
+    _fetchAndCacheUser(uid);
+  }
+
+  UserModel? getCachedUser(String uid) => userCache[uid];
 
   String getOtherUidFromDoc(QueryDocumentSnapshot doc) {
     return _getOtherUid(doc.data() as Map<String, dynamic>);

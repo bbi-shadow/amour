@@ -16,14 +16,12 @@ class UploadService {
     return dio;
   }
 
+  /// Upload ảnh từ File (Mobile)
   static Future<String?> uploadImage(File file) async {
     if (!await file.exists()) {
       debugPrint("❌ File không tồn tại: ${file.path}");
       return null;
     }
-
-    final fileSize = await file.length();
-    debugPrint("📁 Bắt đầu upload (${(fileSize / 1024).toStringAsFixed(1)} KB)");
 
     try {
       final ext = file.path.split('.').last.toLowerCase();
@@ -34,32 +32,23 @@ class UploadService {
         "upload_preset": _uploadPreset,
       });
 
-      final response = await _buildDio().post(_uploadUrl, data: formData,
-        onSendProgress: (sent, total) {
-          if (total > 0) debugPrint("⬆️ Upload: ${(sent / total * 100).toStringAsFixed(0)}%");
-        },
-      );
+      final dio = _buildDio();
+      final response = await dio.post(_uploadUrl, data: formData);
 
       if (response.statusCode == 200) {
         final url = response.data["secure_url"] as String;
-        debugPrint("✅ Upload thành công: $url");
+        debugPrint("✅ Cloudinary Upload Success: $url");
         return url;
       }
-      debugPrint("❌ Server lỗi: ${response.statusCode}");
-      return null;
-    } on DioException catch (e) {
-      debugPrint("❌ Lỗi Dio: ${e.response?.data?["error"]?["message"] ?? e.message}");
-      debugPrint("❌ Status: ${e.response?.statusCode}");
-      debugPrint("❌ Response: ${e.response?.data}");
       return null;
     } catch (e) {
-      debugPrint("❌ Lỗi không xác định: $e");
+      debugPrint("❌ Cloudinary Upload Error: $e");
       return null;
     }
   }
 
+  /// Upload ảnh từ Bytes (Web hoặc Memory)
   static Future<String?> uploadImageWeb(Uint8List bytes) async {
-    debugPrint("📁 Upload Web (${(bytes.length / 1024).toStringAsFixed(1)} KB)");
     try {
       final formData = FormData.fromMap({
         "file": MultipartFile.fromBytes(
@@ -69,14 +58,9 @@ class UploadService {
         "upload_preset": _uploadPreset,
       });
       final response = await _buildDio().post(_uploadUrl, data: formData);
-      final url = response.data["secure_url"] as String;
-      debugPrint("✅ Upload Web thành công: $url");
-      return url;
-    } on DioException catch (e) {
-      debugPrint("❌ Lỗi: ${e.response?.data?["error"]?["message"] ?? e.message}");
-      return null;
+      return response.data["secure_url"] as String;
     } catch (e) {
-      debugPrint("❌ Lỗi: $e");
+      debugPrint("❌ Cloudinary Web Upload Error: $e");
       return null;
     }
   }

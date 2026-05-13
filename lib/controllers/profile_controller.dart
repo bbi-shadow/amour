@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import '../models/user_settings_model.dart';
 import '../models/post_model.dart';
 import '../controllers/auth_controller.dart';
+import '../repositories/user_repository.dart';
 import '../utils/app_constants.dart';
 
 class ProfileController extends GetxController {
@@ -17,7 +18,7 @@ class ProfileController extends GetxController {
   final RxBool isSettingsLoading = false.obs;
   final Rx<UserSettingsModel> settings = UserSettingsModel().obs;
   final RxList<PostModel> myPosts = <PostModel>[].obs;
-  
+
   StreamSubscription? _userSub;
   StreamSubscription? _postsSub;
 
@@ -83,11 +84,18 @@ class ProfileController extends GetxController {
       final currentMap = settings.value.toMap();
       currentMap[key] = value;
       settings.value = UserSettingsModel.fromMap(currentMap);
-      
+
       await FirebaseFirestore.instance
           .collection(AppConstants.colUsers)
           .doc(uid)
           .update({key: value});
+
+      // Nếu user tắt/bật "Trạng thái online" thủ công
+      // → cập nhật isOnline trên Firestore ngay lập tức
+      if (key == 'showOnline') {
+        final userRepo = UserRepository();
+        await userRepo.setOnlineStatus(isOnline: value == true);
+      }
     } catch (e) {
       print("Error saving $key: $e");
     }
@@ -113,8 +121,8 @@ class ProfileController extends GetxController {
 
   Future<void> deleteAccount() async {
     final confirmed = await AppHelpers.confirm(
-      title: "Xoa tai khoan",
-      message: "Hanh dong nay khong the hoan tac. Moi du lieu se bi xoa vinh vien."
+        title: "Xoa tai khoan",
+        message: "Hanh dong nay khong the hoan tac. Moi du lieu se bi xoa vinh vien."
     );
     if (!confirmed) return;
 

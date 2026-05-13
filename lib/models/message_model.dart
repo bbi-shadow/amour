@@ -1,21 +1,39 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Các loại tin nhắn
+/// Loại tin nhắn
 enum MessageType { text, image, emoji, sticker, voice, system, video_call, voice_call }
 
+/// ══════════════════════════════════════════════════════════════════
+/// MessageModel v2 — reactions, delivered, deletedFor, reply preview
+/// ══════════════════════════════════════════════════════════════════
 class MessageModel {
   final String id;
   final String conversationId;
   final String senderId;
   final String text;
   final MessageType type;
-  final String? mediaUrl;       // URL ảnh/voice
+  final String? mediaUrl;
+
+  // ── Status ─────────────────────────────────────────────────────
   final bool seen;
+  final bool delivered;
+  final DateTime? seenAt;
   final DateTime? timestamp;
-  final bool isDeleted;
+
+  // ── Delete / Unsend ────────────────────────────────────────────
+  final bool isDeleted;                       // Thu hồi (cả 2 bên thấy)
+  final Map<String, bool> deletedFor;         // Chỉ ẩn phía mình
+
+  // ── Reply ──────────────────────────────────────────────────────
+  final String? replyToMessageId;
   final String? replyToText;
-  
-  // Call fields
+  final String? replyToSenderId;
+
+  // ── Reactions ──────────────────────────────────────────────────
+  /// reaction = { uid: emoji }  e.g. { 'uid123': '❤️', 'uid456': '👍' }
+  final Map<String, String> reaction;
+
+  // ── Call info ─────────────────────────────────────────────────
   final bool isCallMessage;
   final String? callStatus;
   final int? callDuration;
@@ -28,9 +46,15 @@ class MessageModel {
     this.type = MessageType.text,
     this.mediaUrl,
     this.seen = false,
+    this.delivered = false,
+    this.seenAt,
     this.timestamp,
     this.isDeleted = false,
+    this.deletedFor = const {},
+    this.replyToMessageId,
     this.replyToText,
+    this.replyToSenderId,
+    this.reaction = const {},
     this.isCallMessage = false,
     this.callStatus,
     this.callDuration,
@@ -46,9 +70,19 @@ class MessageModel {
       type: _parseType(d['type']),
       mediaUrl: d['mediaUrl']?.toString(),
       seen: d['seen'] == true,
+      delivered: d['delivered'] == true,
+      seenAt: d['seenAt'] is Timestamp ? (d['seenAt'] as Timestamp).toDate() : null,
       timestamp: d['timestamp'] is Timestamp ? (d['timestamp'] as Timestamp).toDate() : null,
       isDeleted: d['isDeleted'] == true,
+      deletedFor: Map<String, bool>.from(
+        (d['deletedFor'] as Map?)?.map((k, v) => MapEntry(k.toString(), v == true)) ?? {},
+      ),
+      replyToMessageId: d['replyToMessageId']?.toString(),
       replyToText: d['replyToText']?.toString(),
+      replyToSenderId: d['replyToSenderId']?.toString(),
+      reaction: Map<String, String>.from(
+        (d['reaction'] as Map?)?.map((k, v) => MapEntry(k.toString(), v.toString())) ?? {},
+      ),
       isCallMessage: d['isCallMessage'] == true,
       callStatus: d['callStatus']?.toString(),
       callDuration: d['callDuration'] is num ? (d['callDuration'] as num).toInt() : null,
@@ -68,6 +102,15 @@ class MessageModel {
     }
   }
 
+  /// Grouped reactions: { emoji: count }
+  Map<String, int> get reactionSummary {
+    final map = <String, int>{};
+    for (final emoji in reaction.values) {
+      map[emoji] = (map[emoji] ?? 0) + 1;
+    }
+    return map;
+  }
+
   Map<String, dynamic> toMap() => {
     'conversationId': conversationId,
     'senderId': senderId,
@@ -75,9 +118,15 @@ class MessageModel {
     'type': type.name,
     'mediaUrl': mediaUrl,
     'seen': seen,
+    'delivered': delivered,
+    'seenAt': seenAt != null ? Timestamp.fromDate(seenAt!) : null,
     'timestamp': timestamp != null ? Timestamp.fromDate(timestamp!) : FieldValue.serverTimestamp(),
     'isDeleted': isDeleted,
+    'deletedFor': deletedFor,
+    'replyToMessageId': replyToMessageId,
     'replyToText': replyToText,
+    'replyToSenderId': replyToSenderId,
+    'reaction': reaction,
     'isCallMessage': isCallMessage,
     'callStatus': callStatus,
     'callDuration': callDuration,

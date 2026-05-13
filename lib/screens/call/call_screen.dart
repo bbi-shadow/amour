@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import '../../controllers/call_controller.dart';
-import '../../controllers/theme_controller.dart';
-import '../../themes/app_theme.dart';
 
 class CallScreen extends StatelessWidget {
   final String callId;
@@ -12,6 +10,7 @@ class CallScreen extends StatelessWidget {
   final String? otherUserPhotoUrl;
   final bool isVideo;
   final bool isIncoming;
+  final String conversationId;
 
   const CallScreen({
     super.key,
@@ -21,35 +20,114 @@ class CallScreen extends StatelessWidget {
     this.otherUserPhotoUrl,
     required this.isVideo,
     this.isIncoming = false,
+    required this.conversationId,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Khoi tao controller voi tham so truyen vao
-    final controller = Get.put(CallController(
-      callId: callId,
-      otherUserId: otherUserId,
-      otherUserName: otherUserName,
-      isVideo: isVideo,
-      isIncoming: isIncoming,
-    ));
+    // FIX Bug 4: kiểm tra trước khi put để tránh dùng lại instance cũ
+    if (!Get.isRegistered<CallController>(tag: callId)) {
+      Get.put(
+        CallController(
+          callId: callId,
+          otherUserId: otherUserId,
+          otherUserName: otherUserName,
+          otherUserPhotoUrl: otherUserPhotoUrl,
+          isVideo: isVideo,
+          isIncoming: isIncoming,
+          conversationId: conversationId,
+        ),
+        tag: callId,
+      );
+    }
+    final controller = Get.find<CallController>(tag: callId);
 
     return Obx(() {
-      if (controller.callEnded.value) return _buildEndedScreen(isIncoming);
-
-      if (isIncoming && !controller.localUserJoined.value) {
-        return _buildIncomingUI(controller);
+      if (controller.callEnded.value) {
+        return _buildEndedScreen(controller);
       }
 
       return Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: const Color(0xFF0D0D1A),
         body: Stack(
           children: [
-            Center(child: _remoteVideo(controller)),
-            _localVideo(controller),
+            // 1. Video nền hoặc Avatar
+            Positioned.fill(child: _remoteVideo(controller)),
+
+            // 2. Video nhỏ của mình (nếu là video call)
+            if (isVideo) _localVideo(controller),
+
+            // 3. Thông tin người gọi (Header)
             _buildCallHeader(controller),
+
+            // 4. Nút chuyển camera
+            if (isVideo) _buildSwitchCameraBtn(controller),
+
+            // 5. Bộ điều khiển (Mute, End, Speaker)
             _buildControls(controller),
+
+            // 6. Loading khi đang kết nối
+            _buildLoadingOverlay(controller),
+
+            // 7. FIX: hiển thị lỗi kết nối
+            _buildErrorOverlay(controller),
           ],
+        ),
+      );
+    });
+  }
+
+  Widget _buildLoadingOverlay(CallController controller) {
+    return Obx(() {
+      if (!controller.isInitializing.value) return const SizedBox.shrink();
+      return Container(
+        color: Colors.black87,
+        child: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(height: 20),
+              Text(
+                'Đang thiết lập kết nối...',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+
+  // FIX: thêm overlay lỗi kết nối
+  Widget _buildErrorOverlay(CallController controller) {
+    return Obx(() {
+      if (controller.status.value != 'error') return const SizedBox.shrink();
+      return Container(
+        color: Colors.black87,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.signal_wifi_connected_no_internet_4, color: Colors.red, size: 60),
+              const SizedBox(height: 16),
+              const Text(
+                'Không thể kết nối',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Kiểm tra kết nối mạng và thử lại',
+                style: TextStyle(color: Colors.white60, fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => controller.endCall(reason: 'ended'),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text('Kết thúc', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
         ),
       );
     });
@@ -57,53 +135,92 @@ class CallScreen extends StatelessWidget {
 
   Widget _buildCallHeader(CallController controller) {
     return Positioned(
-      top: 0, left: 0, right: 0,
-      child: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            Text(otherUserName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(
-              controller.remoteUid.value != -1 ? controller.timerText : "Dang ket noi...",
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
+      top: 60,
+      left: 0,
+      right: 0,
+      child: Column(
+        children: [
+          Text(
+            otherUserName,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              shadows: [Shadow(blurRadius: 8, color: Colors.black)],
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 10),
+          Obx(() => Text(
+            controller.statusText,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 16,
+              shadows: [Shadow(blurRadius: 4, color: Colors.black)],
+            ),
+          )),
+        ],
       ),
     );
   }
 
   Widget _remoteVideo(CallController controller) {
-    if (controller.remoteUid.value != -1 && isVideo) {
-      return AgoraVideoView(
-        controller: VideoViewController.remote(
-          rtcEngine: controller.engine!,
-          canvas: VideoCanvas(uid: controller.remoteUid.value),
-          connection: RtcConnection(channelId: callId),
+    return Obx(() {
+      if (controller.remoteUid.value != -1 && isVideo && controller.engine != null) {
+        return AgoraVideoView(
+          controller: VideoViewController.remote(
+            rtcEngine: controller.engine!,
+            canvas: VideoCanvas(uid: controller.remoteUid.value),
+            connection: RtcConnection(channelId: callId),
+          ),
+        );
+      }
+
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white10, width: 2),
+              ),
+              child: CircleAvatar(
+                radius: 80,
+                backgroundColor: Colors.white10,
+                backgroundImage: (otherUserPhotoUrl != null && otherUserPhotoUrl!.isNotEmpty)
+                    ? NetworkImage(otherUserPhotoUrl!)
+                    : null,
+                child: (otherUserPhotoUrl == null || otherUserPhotoUrl!.isEmpty)
+                    ? Text(
+                  otherUserName[0].toUpperCase(),
+                  style: const TextStyle(fontSize: 60, color: Colors.white24),
+                )
+                    : null,
+              ),
+            ),
+          ],
         ),
       );
-    }
-    return Container(
-      color: const Color(0xFF0D0D1A),
-      child: Center(
-        child: CircleAvatar(
-          radius: 60,
-          backgroundImage: otherUserPhotoUrl != null ? NetworkImage(otherUserPhotoUrl!) : null,
-          child: otherUserPhotoUrl == null ? Text(otherUserName[0].toUpperCase(), style: const TextStyle(fontSize: 40)) : null,
-        ),
-      ),
-    );
+    });
   }
 
   Widget _localVideo(CallController controller) {
-    if (controller.localUserJoined.value && isVideo && !controller.isCameraOff.value) {
+    return Obx(() {
+      if (!controller.localUserJoined.value ||
+          controller.isCameraOff.value ||
+          controller.engine == null) {
+        return const SizedBox.shrink();
+      }
       return Positioned(
-        top: 40, right: 20,
+        top: 120,
+        right: 20,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: SizedBox(
-            width: 100, height: 150,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: 100,
+            height: 150,
+            color: Colors.black,
             child: AgoraVideoView(
               controller: VideoViewController(
                 rtcEngine: controller.engine!,
@@ -113,102 +230,78 @@ class CallScreen extends StatelessWidget {
           ),
         ),
       );
-    }
-    return const SizedBox.shrink();
+    });
   }
 
   Widget _buildControls(CallController controller) {
     return Positioned(
-      bottom: 50, left: 0, right: 0,
-      child: Row(
+      bottom: 80,
+      left: 0,
+      right: 0,
+      child: Obx(() => Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _controlBtn(
+          _iconBtn(
             icon: controller.isMuted.value ? Icons.mic_off : Icons.mic,
+            label: 'Micro',
+            color: controller.isMuted.value ? Colors.red : Colors.white12,
             onTap: controller.toggleMute,
-            color: controller.isMuted.value ? Colors.red : Colors.white24,
           ),
-          _controlBtn(
-            icon: Icons.call_end,
+          GestureDetector(
             onTap: () => controller.endCall(),
-            color: Colors.red,
-            size: 70,
-          ),
-          if (isVideo)
-            _controlBtn(
-              icon: controller.isCameraOff.value ? Icons.videocam_off : Icons.videocam,
-              onTap: controller.toggleCamera,
-              color: controller.isCameraOff.value ? Colors.red : Colors.white24,
-            )
-          else
-            _controlBtn(
-              icon: controller.isSpeaker.value ? Icons.volume_up : Icons.volume_down,
-              onTap: controller.toggleSpeaker,
-              color: controller.isSpeaker.value ? AppColors.primary : Colors.white24,
+            child: Container(
+              width: 75,
+              height: 75,
+              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+              child: const Icon(Icons.call_end, color: Colors.white, size: 35),
             ),
-        ],
-      ),
-    );
-  }
-
-  Widget _controlBtn({required IconData icon, required VoidCallback onTap, required Color color, double size = 56}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: size, height: size,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        child: Icon(icon, color: Colors.white, size: size * 0.5),
-      ),
-    );
-  }
-
-  Widget _buildIncomingUI(CallController controller) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Spacer(),
-          CircleAvatar(
-            radius: 70,
-            backgroundImage: otherUserPhotoUrl != null ? NetworkImage(otherUserPhotoUrl!) : null,
           ),
-          const SizedBox(height: 24),
-          Text(otherUserName, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text(isVideo ? "Cuoc goi video den..." : "Cuoc goi den...", style: const TextStyle(color: Colors.white60)),
-          const Spacer(),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _incomingActionBtn(Icons.call_end, "Tu choi", Colors.red, controller.rejectCall),
-              _incomingActionBtn(Icons.call, "Chap nhan", Colors.green, controller.acceptCall),
-            ],
+          _iconBtn(
+            icon: controller.isSpeakerOn.value ? Icons.volume_up : Icons.volume_down,
+            label: 'Loa',
+            color: controller.isSpeakerOn.value ? Colors.blueAccent : Colors.white12,
+            onTap: controller.toggleSpeaker,
           ),
-          const SizedBox(height: 80),
         ],
-      ),
+      )),
     );
   }
 
-  Widget _incomingActionBtn(IconData icon, String label, Color color, VoidCallback onTap) {
+  Widget _iconBtn({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
     return Column(
       children: [
         GestureDetector(
           onTap: onTap,
           child: Container(
-            width: 70, height: 70,
+            width: 55,
+            height: 55,
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            child: Icon(icon, color: Colors.white, size: 30),
+            child: Icon(icon, color: Colors.white),
           ),
         ),
-        const SizedBox(height: 12),
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+        const SizedBox(height: 8),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
       ],
     );
   }
 
-  Widget _buildEndedScreen(bool incoming) {
+  Widget _buildSwitchCameraBtn(CallController controller) {
+    return Positioned(
+      top: 50,
+      left: 20,
+      child: IconButton(
+        icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
+        onPressed: controller.switchCamera,
+      ),
+    );
+  }
+
+  Widget _buildEndedScreen(CallController controller) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D1A),
       body: Center(
@@ -216,10 +309,18 @@ class CallScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.call_end, color: Colors.red, size: 80),
-            const SizedBox(height: 24),
-            const Text("Cuoc goi da ket thuc", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text("Dang quay lai...", style: TextStyle(color: Colors.white.withOpacity(0.3))),
+            const SizedBox(height: 20),
+            Text(
+              controller.endReason.value == 'no_answer'
+                  ? 'Không trả lời'
+                  : controller.endReason.value == 'rejected'
+                  ? 'Cuộc gọi bị từ chối'
+                  : 'Cuộc gọi kết thúc',
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            const Text('Đang quay lại...', style: TextStyle(color: Colors.white38)),
           ],
         ),
       ),
