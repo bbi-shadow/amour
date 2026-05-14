@@ -16,14 +16,14 @@
 ## 📊 1. Bảng đối chiếu tiêu chí chấm điểm (Evaluation Evidence)
 *Phần này tổng hợp các minh chứng kỹ thuật phục vụ việc đánh giá dự án.*
 
-| Tiêu chí | Trọng số | Chi tiết & Đường dẫn Source Code chính |
-| :--- | :--- | :--- |
-| 💳 **Payment System** | **2đ** | **VietQR Integration**: Tích hợp thanh toán qua mã QR.<br>`lib/controllers/premium_controller.dart` |
-| 🧠 **Chức năng AI** | **1đ** | **Recommendation Engine**: Thuật toán gợi ý so khớp hồ sơ.<br>`lib/services/recommendation_service.dart` |
-| 🗄️ **NoSQL Database** | **1đ** | **Firestore**: Cấu trúc Document-oriented, Schema linh hoạt.<br>`lib/services/firestore_service.dart` |
-| 🌐 **Call API** | **1đ** | **Google Maps** (Vị trí), **Cloudinary** (Media), **Agora** (Video Call).<br>`lib/services/upload_service.dart` |
-| ⚡ **Realtime/Network**| **1đ** | Cập nhật tin nhắn và cuộc gọi tức thời (< 100ms).<br>`lib/controllers/chat_detail_controller.dart` |
-| 🎬 **Video Demo** | - | [Link Video Demo tại đây] |
+| Tiêu chí |  Chi tiết & Đường dẫn Source Code chính |
+| :--- | :--- |
+| 💳 **Payment System** |**VietQR Integration**: Tích hợp thanh toán qua mã QR.<br>`lib/controllers/premium_controller.dart` |
+| 🧠 **Chức năng AI** | **Recommendation Engine**: Thuật toán gợi ý so khớp hồ sơ.<br>`lib/services/recommendation_service.dart` |
+| 🗄️ **NoSQL Database** | **Firestore**: Cấu trúc Document-oriented, Schema linh hoạt.<br>`lib/services/firestore_service.dart` |
+| 🌐 **Call API** | **Google Maps** (Vị trí), **Cloudinary** (Media), **Agora** (Video Call).<br>`lib/services/upload_service.dart` |
+| ⚡ **Realtime/Network**|  Cập nhật tin nhắn và cuộc gọi tức thời (< 100ms).<br>`lib/controllers/chat_detail_controller.dart` |
+| 🎬 **Video Demo** |  |
 
 ---
 
