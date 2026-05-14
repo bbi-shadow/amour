@@ -27,7 +27,7 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await initializeDateFormatting('vi', null); // ← fix LocaleDataException
+  await initializeDateFormatting('vi', null); 
   await FCMService.init();
 
   runApp(const AmourApp());
@@ -65,36 +65,25 @@ class AmourApp extends StatelessWidget {
   }
 }
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends GetView<AuthController> {
   const AuthGate({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SplashScreen();
-        }
+    return Obx(() {
+      // 1. Nếu hệ thống chưa sẵn sàng (đang tải profile/role) -> Hiện màn hình chờ có Logo
+      if (!controller.isReady.value) {
+        return const SplashScreen();
+      }
 
-        if (snapshot.hasData && snapshot.data != null) {
-          return Obx(() {
-            final auth = AuthController.to;
-            // Cho load profile tu Firestore
-            if (auth.currentUser.value == null) return const SplashScreen();
-
-            return FutureBuilder<bool>(
-              future : auth.checkIsAdmin(snapshot.data!.uid),
-              builder: (context, adminSnap) {
-                if (adminSnap.connectionState == ConnectionState.waiting) return const SplashScreen();
-                return (adminSnap.data == true) ? const AdminScreen() : const HomeScreen();
-              },
-            );
-          });
-        }
+      // 2. Nếu chưa đăng nhập -> Đưa về màn Login
+      if (controller.firebaseUser.value == null) {
         return const LoginScreen();
-      },
-    );
+      }
+
+      // 3. Đã đăng nhập -> Vào Admin hoặc Home dựa trên role đã được cache sẵn
+      return controller.isAdmin.value ? const AdminScreen() : const HomeScreen();
+    });
   }
 }
 
@@ -102,9 +91,31 @@ class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Scaffold(
+      backgroundColor: isDark ? AppColors.darkBg : Colors.white,
       body: Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Hiển thị logo chính giữa màn hình splash
+            Hero(
+              tag: 'app_logo',
+              child: Image.asset(
+                'assets/image/logo.png',
+                width: 120,
+                height: 120,
+                errorBuilder: (context, error, stackTrace) => 
+                  const Icon(Icons.favorite_rounded, size: 80, color: AppColors.primary),
+              ),
+            ),
+            const SizedBox(height: 32),
+            const CircularProgressIndicator(
+              color: AppColors.primary,
+              strokeWidth: 3,
+            ),
+          ],
+        ),
       ),
     );
   }

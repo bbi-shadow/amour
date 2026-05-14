@@ -20,20 +20,47 @@ class RegisterController extends GetxController {
   }
 
   Future<void> loadCities() async {
+    isLoadingCities.value = true;
+    final fallbackCities = [
+      'Hà Nội',
+      'TP. Hồ Chí Minh',
+      'Đà Nẵng',
+      'Cần Thơ',
+      'Hải Phòng',
+      'Nha Trang',
+      'Huế',
+      'Vũng Tàu',
+      'Đà Lạt',
+      'Buôn Ma Thuột',
+    ];
+
     try {
       final snap = await FirebaseFirestore.instance
           .collection(AppConstants.colCities)
           .orderBy('name')
           .get();
 
-      cities.value = snap.docs
+      final loaded = snap.docs
           .map((d) => d.data()['name']?.toString() ?? '')
           .where((name) => name.isNotEmpty)
           .toList();
+
+      if (loaded.isNotEmpty) {
+        cities.value = loaded;
+      } else {
+        print("Firestore cities collection is empty, using robust fallback list.");
+        cities.value = fallbackCities;
+      }
     } catch (e) {
-      print("Error loading cities: $e");
+      print("Error loading cities from Firestore: $e");
+      print("Automatically injecting fallback cities list due to missing composite index or permission rules.");
+      cities.value = fallbackCities;
     } finally {
       isLoadingCities.value = false;
+      // Tự động chọn thành phố đầu tiên làm mặc định để form luôn hợp lệ
+      if (selectedCity.value.isEmpty && cities.isNotEmpty) {
+        selectedCity.value = cities.first;
+      }
     }
   }
 
@@ -43,19 +70,31 @@ class RegisterController extends GetxController {
     required String password,
     required String bio,
   }) async {
+    if (name.trim().isEmpty || email.trim().isEmpty || password.isEmpty) {
+      AppHelpers.showError("Vui lòng nhập đầy đủ thông tin bắt buộc");
+      return;
+    }
+    if (!AppHelpers.isValidEmail(email.trim())) {
+      AppHelpers.showError("Email không hợp lệ");
+      return;
+    }
+    if (password.length < 6) {
+      AppHelpers.showError("Mật khẩu tối thiểu 6 ký tự");
+      return;
+    }
     if (selectedCity.value.isEmpty) {
       AppHelpers.showError("Vui lòng chọn thành phố");
       return;
     }
 
     final result = await AuthController.to.registerWithEmail(
-      name: name,
-      email: email,
+      name: name.trim(),
+      email: email.trim(),
       password: password,
       age: age.value,
       gender: gender.value,
       city: selectedCity.value,
-      bio: bio,
+      bio: bio.trim(),
     );
 
     if (result.isFailure) {

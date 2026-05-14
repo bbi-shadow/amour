@@ -2,24 +2,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../controllers/auth_controller.dart';
+import '../models/user_model.dart';
+import '../themes/app_theme.dart';
 import '../utils/app_constants.dart';
 
 /// ══════════════════════════════════════════════════════════════
-/// PremiumController — Quản lý đăng ký gói Premium
-///
-/// FIX [SECURITY]: Phiên bản cũ ghi isPremium thẳng vào Firestore từ client
-///   → Bất kỳ user nào cũng có thể tự set isPremium = true bằng Firestore REST.
-///
-/// Giải pháp: Dùng Pending Payment Flow:
-///   1. Client tạo pending_payment document (trạng thái 'pending')
-///   2. Admin/Cloud Function xác nhận và set isPremium = true
-///   3. Client poll trạng thái trong 60 giây, nếu = 'confirmed' → kích hoạt
-///
-/// Với production thực tế: tích hợp VNPay/Stripe webhook vào Cloud Function
-/// để tự động confirm payment. Code dưới đây đã sẵn sàng cho luồng đó.
+/// PremiumController — Quản lý đăng ký gói Premium qua VietQR Tĩnh
 /// ══════════════════════════════════════════════════════════════
 class PremiumController extends GetxController {
   static PremiumController get to => Get.find();
+
+  // ── CẤU HÌNH THÔNG TIN TÀI KHOẢN NGÂN HÀNG (VIETQR) ───────────
+  final String bankCode = 'mbbank';
+  final String bankAccount = '4089051041187302'; // Thay số tài khoản của bạn vào đây
+  final String accountName = 'CAO XUAN TU';
 
   final RxInt selectedPlanIndex = 1.obs;
   final RxBool isLoading = false.obs;
@@ -74,6 +70,12 @@ class PremiumController extends GetxController {
 
   PremiumPlan get selectedPlan => plans[selectedPlanIndex.value];
 
+  // ── TẠO URL VIETQR TỰ ĐỘNG ─────────────────────────────────────
+  String getVietQRUrl(int amount, String orderCode) {
+    final encodedName = Uri.encodeComponent(accountName);
+    return 'https://img.vietqr.io/image/$bankCode-$bankAccount-compact2.png?amount=$amount&addInfo=$orderCode&accountName=$encodedName';
+  }
+
   // ── Subscribe Flow ────────────────────────────────────────────
 
   Future<void> subscribe() async {
@@ -83,19 +85,12 @@ class PremiumController extends GetxController {
     }
 
     final plan = selectedPlan;
-    final confirmed = await AppHelpers.confirm(
-      title: 'Xác nhận đăng ký',
-      message:
-      'Gói ${plan.name} — ${AppHelpers.formatPrice(plan.price)}/tháng\n\nBạn sẽ được chuyển đến trang thanh toán.',
-    );
-    if (!confirmed) return;
-
+    
     isLoading.value = true;
     paymentStatus.value = 'pending';
 
     try {
-      // BƯỚC 1: Tạo pending_payment document
-      // Cloud Function / backend lắng nghe collection này để xử lý payment
+      // BƯỚC 1: Tạo pending_payment document để lấy Mã đơn hàng (docId)
       final paymentRef = await FirebaseFirestore.instance
           .collection('pending_payments')
           .add({
@@ -103,34 +98,185 @@ class PremiumController extends GetxController {
         'plan': plan.name.toLowerCase(),
         'price': plan.price,
         'durationDays': plan.durationDays,
-        'status': 'pending', // pending → confirmed / failed
+        'status': 'pending', // pending → confirmed
         'createdAt': FieldValue.serverTimestamp(),
-        // Production: thêm paymentMethodId, transactionId từ VNPay/Stripe SDK
       });
 
-      // BƯỚC 2: Chờ Cloud Function / admin xác nhận (poll 60s)
-      final success = await _waitForPaymentConfirmation(paymentRef.id);
+      isLoading.value = false;
 
-      if (success) {
-        paymentStatus.value = 'confirmed';
-        AppHelpers.showSuccess('Kích hoạt gói ${plan.name} thành công! 🎉');
-        Get.back();
-      } else {
-        paymentStatus.value = 'failed';
-        AppHelpers.showError(
-            'Thanh toán chưa được xác nhận. Vui lòng liên hệ hỗ trợ nếu đã thanh toán.');
-      }
+      // Sinh URL mã QR chuyển khoản tĩnh
+      final qrUrl = getVietQRUrl(plan.price, paymentRef.id);
+      
+      // Hiển thị Dialog mã QR thanh toán
+      _showQRDialog(plan, qrUrl, paymentRef.id);
+
+      // BƯỚC 2: Chạy ngầm Polling chờ Admin xác nhận đơn hàng (tối đa 10 phút)
+      _waitForPaymentConfirmation(paymentRef.id).then((success) async {
+        if (success) {
+          paymentStatus.value = 'confirmed';
+          
+          // Cập nhật lại UserModel trong AuthController để mở khóa toàn app
+          final updatedDoc = await FirebaseFirestore.instance.collection(AppConstants.colUsers).doc(uid).get();
+          if (updatedDoc.exists) {
+            AuthController.to.currentUser.value = UserModel.fromFirestore(updatedDoc);
+          }
+          
+          AppHelpers.showSuccess('Kích hoạt gói ${plan.name} thành công! 🎉');
+          // Nếu user đang ở trang premium thì tự động quay về
+          if (Get.currentRoute == AppRoutes.premium) {
+            Get.back();
+          }
+        }
+      });
     } catch (e) {
       paymentStatus.value = 'failed';
-      AppHelpers.showError('Lỗi đăng ký: ${e.toString()}');
-    } finally {
+      AppHelpers.showError('Lỗi khởi tạo thanh toán: ${e.toString()}');
       isLoading.value = false;
     }
   }
 
-  /// Poll Firestore để chờ Cloud Function confirm payment (tối đa 60 giây)
+  void _showQRDialog(PremiumPlan plan, String qrUrl, String orderCode) {
+    Get.dialog(
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.white,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary, size: 36),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Thanh toán Gói ${plan.name}',
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.black87),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Mở App Ngân hàng quét mã QR dưới đây để chuyển khoản tự động',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.black54),
+              ),
+              const SizedBox(height: 20),
+              
+              // QR Code container
+              Container(
+                width: 220,
+                height: 220,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade300, width: 1.5),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                  ],
+                ),
+                child: Image.network(
+                  qrUrl,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Center(
+                      child: Text('Lỗi tải mã QR', style: TextStyle(color: Colors.red, fontSize: 12)),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              // Chi tiết chuyển khoản (Fallback)
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  children: [
+                    _buildInfoRow('Ngân hàng:', bankCode.toUpperCase()),
+                    const SizedBox(height: 6),
+                    _buildInfoRow('Số tài khoản:', bankAccount),
+                    const SizedBox(height: 6),
+                    _buildInfoRow('Chủ tài khoản:', accountName),
+                    const SizedBox(height: 6),
+                    _buildInfoRow('Số tiền:', AppHelpers.formatPrice(plan.price)),
+                    const Divider(height: 16),
+                    _buildInfoRow('Nội dung (Bắt buộc):', orderCode, isBold: true, color: AppColors.primary),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              
+              // Button "Tôi đã chuyển khoản"
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Get.back(); // Đóng dialog
+                    AppHelpers.showSuccess(
+                      'Đơn hàng đang được Admin hệ thống duyệt. Tài khoản sẽ được nâng cấp ngay sau khi xác nhận.',
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 4,
+                  ),
+                  child: const Text('Tôi đã chuyển khoản', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => Get.back(),
+                child: const Text('Hủy giao dịch', style: TextStyle(color: Colors.grey, fontSize: 13)),
+              ),
+            ],
+          ),
+        ),
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  Widget _buildInfoRow(String label, String val, {bool isBold = false, Color? color}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            val,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isBold ? FontWeight.w900 : FontWeight.w600,
+              color: color ?? Colors.black87,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Poll Firestore để chờ Admin confirm payment (tối đa 10 phút)
   Future<bool> _waitForPaymentConfirmation(String paymentId) async {
-    const maxWait = Duration(seconds: 60);
+    const maxWait = Duration(seconds: 600);
     const pollInterval = Duration(seconds: 2);
     final deadline = DateTime.now().add(maxWait);
 
