@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import '../../controllers/chat_detail_controller.dart';
 import '../../models/message_model.dart';
+import '../../controllers/theme_controller.dart';
 import '../../themes/app_theme.dart';
 
 // ══════════════════════════════════════════════════════════════════
@@ -84,61 +85,64 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.darkBg,
-      appBar: _buildAppBar(),
-      body: GestureDetector(
-        onTap: () {
-          _showEmoji.value = false;
-          _showAttach.value = false;
-          FocusScope.of(context).unfocus();
-        },
-        child: Column(children: [
-          // Load more bar
-          Obx(() => _c.isLoadingMore.value
-              ? LinearProgressIndicator(
-              minHeight: 2,
-              color: AppColors.primary,
-              backgroundColor: AppColors.darkCard)
-              : const SizedBox.shrink()),
+    return Obx(() {
+      final isDark = ThemeController.to.isDark;
+      return Scaffold(
+        backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
+        appBar: _buildAppBar(isDark),
+        body: GestureDetector(
+          onTap: () {
+            _showEmoji.value = false;
+            _showAttach.value = false;
+            FocusScope.of(context).unfocus();
+          },
+          child: Column(children: [
+            // Load more bar
+            Obx(() => _c.isLoadingMore.value
+                ? LinearProgressIndicator(
+                minHeight: 2,
+                color: AppColors.primary,
+                backgroundColor: isDark ? AppColors.darkCard : Colors.grey.shade200)
+                : const SizedBox.shrink()),
 
-          // Messages
-          Expanded(child: _buildMessageList()),
+            // Messages
+            Expanded(child: _buildMessageList()),
 
-          // Typing
-          Obx(() => _c.isOtherTyping.value
-              ? _buildTypingIndicator()
-              : const SizedBox.shrink()),
+            // Typing
+            Obx(() => _c.isOtherTyping.value
+                ? _buildTypingIndicator()
+                : const SizedBox.shrink()),
 
-          // Emoji quick bar
-          Obx(() =>
-          _showEmoji.value ? _buildEmojiBar() : const SizedBox.shrink()),
+            // Emoji quick bar
+            Obx(() =>
+            _showEmoji.value ? _buildEmojiBar() : const SizedBox.shrink()),
 
-          // Reply preview
-          Obx(() => _c.replyToMessage.value != null
-              ? _buildReplyPreview()
-              : const SizedBox.shrink()),
+            // Reply preview
+            Obx(() => _c.replyToMessage.value != null
+                ? _buildReplyPreview()
+                : const SizedBox.shrink()),
 
-          // Attach menu
-          Obx(() => _showAttach.value
-              ? _buildAttachMenu()
-              : const SizedBox.shrink()),
+            // Attach menu
+            Obx(() => _showAttach.value
+                ? _buildAttachMenu()
+                : const SizedBox.shrink()),
 
-          _buildInputBar(),
-        ]),
-      ),
-    );
+            _buildInputBar(isDark),
+          ]),
+        ),
+      );
+    });
   }
 
   // ── AppBar ─────────────────────────────────────────────────────
-  PreferredSizeWidget _buildAppBar() {
+  PreferredSizeWidget _buildAppBar(bool isDark) {
     return AppBar(
-      backgroundColor: AppColors.darkCard,
+      backgroundColor: isDark ? AppColors.darkCard : Colors.white,
       elevation: 0,
       titleSpacing: 0,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new_rounded,
-            color: Colors.white, size: 18),
+        icon: Icon(Icons.arrow_back_ios_new_rounded,
+            color: isDark ? Colors.white : Colors.black87, size: 18),
         onPressed: () => Get.back(),
       ),
       title: Obx(() {
@@ -149,7 +153,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           Stack(children: [
             CircleAvatar(
               radius: 19,
-              backgroundColor: const Color(0xFF2A2A3D),
+              backgroundColor: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200,
               backgroundImage:
               (user?.photoUrl.isNotEmpty ?? false)
                   ? NetworkImage(user!.photoUrl)
@@ -171,7 +175,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     color: AppColors.online,
                     shape: BoxShape.circle,
                     border: Border.all(
-                        color: AppColors.darkCard, width: 1.5),
+                        color: isDark ? AppColors.darkCard : Colors.white, width: 1.5),
                   ),
                 ),
               ),
@@ -182,8 +186,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(widget.otherUserName,
-                      style: const TextStyle(
-                          color: Colors.white,
+                      style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black87,
                           fontSize: 15,
                           fontWeight: FontWeight.w700)),
                   AnimatedSwitcher(
@@ -213,13 +217,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       }),
       actions: [
         IconButton(
-          icon: const Icon(Icons.call_rounded,
-              color: Colors.white, size: 22),
+          icon: Icon(Icons.call_rounded,
+              color: isDark ? Colors.white : Colors.black87, size: 22),
           onPressed: () => _c.initiateCall(isVideo: false),
         ),
         IconButton(
-          icon: const Icon(Icons.videocam_rounded,
-              color: Colors.white, size: 24),
+          icon: Icon(Icons.videocam_rounded,
+              color: isDark ? Colors.white : Colors.black87, size: 24),
           onPressed: () => _c.initiateCall(isVideo: true),
         ),
         const SizedBox(width: 4),
@@ -244,7 +248,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           .where((m) => m.deletedFor[_c.myId] != true)
           .toList();
 
-      if (msgs.isEmpty) return _buildEmptyChat();
+      final isDark = ThemeController.to.isDark;
+      if (msgs.isEmpty) return _buildEmptyChat(isDark: isDark);
       _scrollToBottom();
 
       return ListView.builder(
@@ -276,7 +281,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           final isLastMsg = i == msgs.length - 1;
 
           return Column(children: [
-            if (showDate) _dateDivider(msg.timestamp),
+            if (showDate) _dateDivider(msg.timestamp, isDark: ThemeController.to.isDark),
             if (showTime && !showDate) _timeDivider(msg.timestamp),
             _MessageRow(
               msg: msg,
@@ -303,7 +308,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         a.day == b.day;
   }
 
-  Widget _dateDivider(DateTime? ts) {
+  Widget _dateDivider(DateTime? ts, {bool isDark = true}) {
     if (ts == null) return const SizedBox.shrink();
     final now = DateTime.now();
     String label;
@@ -324,9 +329,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Text(label,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF6A6A7A),
+                  color: isDark ? const Color(0xFF6A6A7A) : Colors.grey,
                   fontWeight: FontWeight.w500)),
         ),
         Expanded(
@@ -348,14 +353,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     );
   }
 
-  Widget _buildEmptyChat() {
+  Widget _buildEmptyChat({bool isDark = true}) {
     return Center(
       child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircleAvatar(
               radius: 40,
-              backgroundColor: const Color(0xFF1A1A2E),
+              backgroundColor: isDark ? const Color(0xFF1A1A2E) : Colors.grey.shade200,
               backgroundImage:
               (widget.otherUserPhotoUrl?.isNotEmpty ?? false)
                   ? NetworkImage(widget.otherUserPhotoUrl!)
@@ -370,8 +375,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             ),
             const SizedBox(height: 12),
             Text(widget.otherUserName,
-                style: const TextStyle(
-                    color: Colors.white,
+                style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black87,
                     fontSize: 17,
                     fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
@@ -389,7 +394,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       child: Row(children: [
         CircleAvatar(
           radius: 13,
-          backgroundColor: const Color(0xFF2A2A3D),
+          backgroundColor: ThemeController.to.isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200,
           backgroundImage:
           (_c.otherUser.value?.photoUrl.isNotEmpty ?? false)
               ? NetworkImage(_c.otherUser.value!.photoUrl)
@@ -400,7 +405,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           padding: const EdgeInsets.symmetric(
               horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: const Color(0xFF2A2A3D),
+            color: ThemeController.to.isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade100,
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(18),
               topRight: Radius.circular(18),
@@ -415,15 +420,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }
 
   // ── Input Bar ──────────────────────────────────────────────────
-  Widget _buildInputBar() {
+  Widget _buildInputBar(bool isDark) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
     return Container(
       padding:
       EdgeInsets.fromLTRB(8, 8, 8, bottomPad > 0 ? bottomPad : 8),
-      decoration: const BoxDecoration(
-        color: AppColors.darkCard,
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : Colors.white,
         border: Border(
-            top: BorderSide(color: Color(0xFF2A2A3D), width: 0.5)),
+            top: BorderSide(color: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200, width: 0.5)),
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
         // Emoji
@@ -457,7 +462,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           child: Container(
             constraints: const BoxConstraints(maxHeight: 120),
             decoration: BoxDecoration(
-              color: const Color(0xFF2A2A3D),
+              color: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade100,
               borderRadius: BorderRadius.circular(22),
             ),
             child: TextField(
@@ -465,12 +470,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               onChanged: _c.onTextChanged,
               maxLines: null,
               minLines: 1,
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 14.5, height: 1.4),
-              decoration: const InputDecoration(
+              style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black87, fontSize: 14.5, height: 1.4),
+              decoration: InputDecoration(
                 hintText: 'Aa',
                 hintStyle:
-                TextStyle(color: Color(0xFF6A6A7A), fontSize: 14.5),
+                TextStyle(color: ThemeController.to.isDark ? const Color(0xFF6A6A7A) : Colors.grey, fontSize: 14.5),
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.symmetric(
                     horizontal: 16, vertical: 10),
@@ -534,7 +539,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   Widget _buildEmojiBar() {
     return Container(
       height: 54,
-      color: AppColors.darkCard,
+      color: ThemeController.to.isDark ? AppColors.darkCard : Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -559,10 +564,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   Widget _buildAttachMenu() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-      decoration: const BoxDecoration(
-        color: AppColors.darkCard,
+      decoration: BoxDecoration(
+        color: ThemeController.to.isDark ? AppColors.darkCard : Colors.white,
         border: Border(
-            top: BorderSide(color: Color(0xFF2A2A3D), width: 0.5)),
+            top: BorderSide(color: ThemeController.to.isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200, width: 0.5)),
       ),
       child: Row(children: [
         _AttachItem(
@@ -593,8 +598,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     final isMyReply = reply.senderId == _c.myId;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1A1A2E),
+      decoration: BoxDecoration(
+        color: ThemeController.to.isDark ? const Color(0xFF1A1A2E) : Colors.grey.shade100,
         border: Border(
             left: BorderSide(color: AppColors.primary, width: 3)),
       ),
@@ -637,7 +642,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     HapticFeedback.mediumImpact();
     showModalBottomSheet(
       context: ctx,
-      backgroundColor: const Color(0xFF1E1E30),
+      backgroundColor: ThemeController.to.isDark ? const Color(0xFF1E1E30) : Colors.white,
       shape: const RoundedRectangleBorder(
           borderRadius:
           BorderRadius.vertical(top: Radius.circular(20))),
@@ -728,7 +733,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     showDialog(
       context: ctx,
       builder: (_) => Dialog(
-        backgroundColor: const Color(0xFF1E1E30),
+        backgroundColor: ThemeController.to.isDark ? const Color(0xFF1E1E30) : Colors.white,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20)),
         child: Padding(
@@ -800,7 +805,7 @@ class _MessageRow extends StatelessWidget {
                   if (isLastInGroup)
                     CircleAvatar(
                       radius: 13,
-                      backgroundColor: const Color(0xFF2A2A3D),
+                      backgroundColor: ThemeController.to.isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200,
                       backgroundImage:
                       (otherUser?.photoUrl?.isNotEmpty ?? false)
                           ? NetworkImage(otherUser!.photoUrl)
@@ -838,10 +843,10 @@ class _MessageRow extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2A2A3D),
+                      color: ThemeController.to.isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                          color: AppColors.darkBg, width: 1.5),
+                          color: ThemeController.to.isDark ? AppColors.darkBg : Colors.white, width: 1.5),
                     ),
                     child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -890,6 +895,7 @@ class _Bubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext buildCtx) {
+    final isDark = ThemeController.to.isDark;
     final maxW = MediaQuery.of(context).size.width * 0.72;
     final isDeleted = msg.isDeleted;
 
@@ -907,7 +913,7 @@ class _Bubble extends StatelessWidget {
         padding: const EdgeInsets.symmetric(
             horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.white.withOpacity(0.1)),
+          border: Border.all(color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade300),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(18),
             topRight: const Radius.circular(18),
@@ -935,7 +941,7 @@ class _Bubble extends StatelessWidget {
       replyWidget = Container(
         padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.15),
+          color: isDark ? Colors.black.withOpacity(0.15) : Colors.black.withOpacity(0.06),
           border: const Border(
               left: BorderSide(color: Colors.white38, width: 2)),
           borderRadius: const BorderRadius.only(
@@ -948,9 +954,7 @@ class _Bubble extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
               fontSize: 12,
-              color: isMe
-                  ? Colors.white60
-                  : const Color(0xFF8A8A9A)),
+              color: isMe ? Colors.white60 : (isDark ? const Color(0xFF8A8A9A) : Colors.grey)),
         ),
       );
     }
@@ -975,7 +979,7 @@ class _Bubble extends StatelessWidget {
               if (prog == null) return child;
               return Container(
                 width: 220, height: 220,
-                color: const Color(0xFF2A2A3D),
+                color: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200,
                 child: const Center(
                     child: CircularProgressIndicator(
                         strokeWidth: 2,
@@ -984,7 +988,7 @@ class _Bubble extends StatelessWidget {
             },
             errorBuilder: (_, __, ___) => Container(
               width: 220, height: 100,
-              color: const Color(0xFF2A2A3D),
+              color: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200,
               child: const Icon(Icons.broken_image_outlined,
                   color: Colors.grey),
             ),
@@ -1009,7 +1013,7 @@ class _Bubble extends StatelessWidget {
       decoration: BoxDecoration(
         color: isMe
             ? AppColors.primary
-            : const Color(0xFF2A2A3D),
+            : (isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200),
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(18),
           topRight: const Radius.circular(18),
@@ -1026,8 +1030,8 @@ class _Bubble extends StatelessWidget {
               padding: const EdgeInsets.symmetric(
                   horizontal: 14, vertical: 9),
               child: Text(msg.text,
-                  style: const TextStyle(
-                      color: Colors.white,
+                  style: TextStyle(
+                      color: isMe ? Colors.white : (isDark ? Colors.white : Colors.black87),
                       fontSize: 14.5,
                       height: 1.4)),
             ),
@@ -1075,7 +1079,7 @@ class _CallBubble extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2A3D),
+        color: ThemeController.to.isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
             color: isMissed
@@ -1229,7 +1233,8 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? Colors.white;
+    final isDark = ThemeController.to.isDark;
+    final c = color ?? (isDark ? Colors.white : Colors.black87);
     return ListTile(
       leading: Icon(icon, color: c, size: 22),
       title: Text(label,

@@ -7,11 +7,10 @@ class AppConstants {
   static const appName    = 'Amour';
   static const appVersion = '1.0.0';
 
-  // Agora credentials
-  static const agoraAppId          = '60b853ab652045a6af74da86d5e9e304';
-  // ⚠️ Chỉ dùng cho dev/test — chuyển sang Token Server khi production
-  static const agoraAppCertificate = '4edf7962443d4a0384dae6f56d4a6d6b';
-
+  // ── Zego Cloud credentials (thay Agora) ──────────────────────────────────
+  // Lấy tại: https://console.zegocloud.com → Project → AppID & AppSign
+  static const int zegoAppId      = 571811223;
+  static const String zegoAppSign = 'd944a475a15f7d8255b72de34357fc374f4b4bae8a4d26b5e4214afc095e6587';
   // Firestore Collections
   static const colUsers         = 'users';
   static const colAdmins        = 'admins';
@@ -25,7 +24,7 @@ class AppConstants {
   static const colMatches       = 'matches';
   static const colReports       = 'reports';
 
-  // Discovery Options - Icons standard
+  // Discovery Options
   static const List<Map<String, dynamic>> interestOptions = [
     {'icon': Icons.music_note, 'label': 'Âm nhạc'},
     {'icon': Icons.movie_outlined, 'label': 'Phim ảnh'},

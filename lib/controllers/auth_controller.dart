@@ -26,7 +26,7 @@ class AuthController extends GetxController {
   final Rx<User?> firebaseUser = Rx<User?>(null);
   final Rx<UserModel?> currentUser = Rx<UserModel?>(null);
   final RxBool isAdmin = false.obs;
-  final RxBool isReady = false.obs; // Cờ báo hiệu app đã load xong dữ liệu ban đầu
+  final RxBool isReady = false.obs;
   final RxBool isLoading = false.obs;
   final RxBool isGoogleLoading = false.obs;
 
@@ -42,7 +42,6 @@ class AuthController extends GetxController {
   void _onAuthStateChanged(User? user) async {
     if (user != null) {
       isReady.value = false;
-      // Load song song profile và quyền admin để tối ưu tốc độ
       final results = await Future.wait([
         _userRepo.getById(user.uid),
         checkIsAdmin(user.uid),
@@ -66,6 +65,7 @@ class AuthController extends GetxController {
     }
   }
 
+  // ── Đăng nhập email ────────────────────────────────────────────────────────
   Future<Result<bool>> loginWithEmail(String email, String password) async {
     if (email.isEmpty || password.isEmpty) return Result.failure('Vui lòng nhập đầy đủ thông tin');
     isLoading.value = true;
@@ -79,10 +79,74 @@ class AuthController extends GetxController {
     }
   }
 
+  // ── Đăng ký email ──────────────────────────────────────────────────────────
+  Future<Result<bool>> registerWithEmail({
+    required String name,
+    required String email,
+    required String password,
+    required int age,
+    required String gender,
+    required String city,
+    required String bio,
+  }) async {
+    isLoading.value = true;
+    try {
+      final cred = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      final user = cred.user!;
+      await user.updateDisplayName(name);
+
+      final newUser = UserModel(
+        uid: user.uid,
+        name: name,
+        email: email.trim(),
+        age: age,
+        bio: bio,
+        photoUrl: '',
+        city: city,
+        createdAt: DateTime.now(),
+      );
+      await _userRepo.create(newUser);
+      return Result.success(true);
+    } on FirebaseAuthException catch (e) {
+      return Result.failure(_translateError(e.code));
+    } catch (e) {
+      return Result.failure('Đăng ký thất bại: ${e.toString()}');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // ── Quên mật khẩu ─────────────────────────────────────────────────────────
+  Future<void> forgotPassword(String email) async {
+    if (email.trim().isEmpty) {
+      AppHelpers.showError('Vui lòng nhập email trước');
+      return;
+    }
+    if (!AppHelpers.isValidEmail(email.trim())) {
+      AppHelpers.showError('Email không hợp lệ');
+      return;
+    }
+    isLoading.value = true;
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+      AppHelpers.showSuccess('Đã gửi email đặt lại mật khẩu!\nKiểm tra hộp thư của bạn.');
+    } on FirebaseAuthException catch (e) {
+      AppHelpers.showError(_translateError(e.code));
+    } catch (e) {
+      AppHelpers.showError('Lỗi: ${e.toString()}');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // ── Đăng nhập Google ───────────────────────────────────────────────────────
   Future<Result<bool>> loginWithGoogle() async {
     isGoogleLoading.value = true;
     try {
-      await _googleSignIn.signOut(); 
+      await _googleSignIn.signOut();
       final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         isGoogleLoading.value = false;
@@ -114,6 +178,7 @@ class AuthController extends GetxController {
     }
   }
 
+  // ── Đăng xuất ─────────────────────────────────────────────────────────────
   Future<void> logout() async {
     isReady.value = false;
     await _userRepo.setOnlineStatus(isOnline: false);
@@ -127,9 +192,11 @@ class AuthController extends GetxController {
     switch (code) {
       case 'user-not-found': return 'Email không tồn tại';
       case 'wrong-password': return 'Sai mật khẩu';
+      case 'email-already-in-use': return 'Email đã được sử dụng';
+      case 'weak-password': return 'Mật khẩu quá yếu (tối thiểu 6 ký tự)';
+      case 'invalid-email': return 'Email không hợp lệ';
+      case 'too-many-requests': return 'Quá nhiều lần thử. Vui lòng thử lại sau';
       default: return 'Đã có lỗi xảy ra. Thử lại sau!';
     }
   }
-  
-  // Các hàm khác giữ nguyên...
 }
